@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 interface BusMarkerProps {
   position: { lat: number; lng: number };
   busId: string;
-  onClick?: (e: any) => void;
+  onClick?: () => void;
   color?: string;
   isSelected?: boolean;
 }
@@ -17,8 +17,14 @@ interface BusMarkerProps {
 const BusMarker: FC<BusMarkerProps> = ({ position, busId, onClick, color = 'hsl(var(--accent))', isSelected }) => {
   const ringClass = isSelected ? 'ring-4 ring-offset-2 ring-blue-500' : 'ring-4 ring-white/50 dark:ring-black/50';
 
+  const handleClick = (e: any) => {
+    // The google maps event object doesn't have stopPropagation, 
+    // but calling our onClick without arguments is safe.
+    onClick?.();
+  };
+
   return (
-    <AdvancedMarker position={position} onClick={onClick}>
+    <AdvancedMarker position={position} onClick={handleClick}>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger>
