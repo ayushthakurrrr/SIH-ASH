@@ -190,12 +190,6 @@ export default function DriverPage() {
 
   const socket = useRef<Socket | null>(null);
   const watchId = useRef<number | null>(null);
-  const intervalId = useRef<NodeJS.Timeout | null>(null);
-  const locationRef = useRef(location);
-
-  useEffect(() => {
-    locationRef.current = location;
-  }, [location]);
 
   useEffect(() => {
     const fetchRoutes = async () => {
@@ -237,9 +231,6 @@ export default function DriverPage() {
       if (watchId.current) {
         navigator.geolocation.clearWatch(watchId.current);
       }
-      if (intervalId.current) {
-        clearInterval(intervalId.current);
-      }
     };
   }, []);
   
@@ -273,7 +264,10 @@ export default function DriverPage() {
           lng: position.coords.longitude,
         };
         setLocation(newLocation);
-        // We only set the location here. The interval will send the update.
+        if (socket.current?.connected) {
+          socket.current.emit('updateLocation', { busId, location: newLocation });
+          setStatus('Broadcasting Location');
+        }
       },
       (geoError) => {
         setError(`Geolocation error: ${geoError.message}`);
@@ -286,13 +280,6 @@ export default function DriverPage() {
       }
     );
 
-    intervalId.current = setInterval(() => {
-        if (socket.current?.connected && locationRef.current) {
-            socket.current.emit('updateLocation', { busId, location: locationRef.current });
-            setStatus('Broadcasting Location');
-        }
-    }, 30000); // 30 seconds
-
     setIsTracking(true);
   };
 
@@ -300,10 +287,6 @@ export default function DriverPage() {
     if (watchId.current) {
       navigator.geolocation.clearWatch(watchId.current);
       watchId.current = null;
-    }
-    if (intervalId.current) {
-        clearInterval(intervalId.current);
-        intervalId.current = null;
     }
     setIsTracking(false);
     setStatus(socket.current?.connected ? 'Connected' : 'Disconnected');
@@ -483,3 +466,5 @@ export default function DriverPage() {
     </main>
   );
 }
+
+    
