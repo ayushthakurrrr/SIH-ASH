@@ -1,13 +1,137 @@
+
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, type FC } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { PlayCircle, StopCircle, Bus, MapPin, AlertTriangle, Wifi } from 'lucide-react';
+import { PlayCircle, StopCircle, Bus, MapPin, AlertTriangle, Wifi, Route, Navigation, Flag } from 'lucide-react';
+import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { app } from '@/lib/firebase';
+import type { BusRoute } from '@/lib/bus-routes';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { getRoutePath } from '@/ai/flows/get-route-path-flow';
+import BusMarker from '@/components/BusMarker';
+import StopMarker from '@/components/StopMarker';
+import Polyline from '@/components/Polyline';
+import { useToast } from "@/hooks/use-toast";
+
+type RoutePath = { lat: number; lng: number }[];
+
+const haversineDistance = (coords1: {lat: number, lng: number}, coords2: {lat: number, lng: number}) => {
+    const toRad = (x: number) => x * Math.PI / 180;
+    const R = 6371; // km
+    const dLat = toRad(coords2.lat - coords1.lat);
+    const dLon = toRad(coords2.lng - coords1.lng);
+    const lat1 = toRad(coords1.lat);
+    const lat2 = toRad(coords2.lat);
+
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c * 1000; // meters
+}
+
+const FitBoundsToDriver: FC<{ driverLocation: { lat: number, lng: number } | null, nextStopLocation: { lat: number, lng: number } | null }> = ({ driverLocation, nextStopLocation }) => {
+    const map = useMap();
+
+    useEffect(() => {
+        if (!map || !driverLocation) return;
+        
+        const bounds = new google.maps.LatLngBounds();
+        bounds.extend(driverLocation);
+        if (nextStopLocation) {
+            bounds.extend(nextStopLocation);
+        }
+        
+        if (bounds.getNorthEast().equals(bounds.getSouthWest())) {
+             map.setCenter(driverLocation);
+             map.setZoom(16);
+        } else {
+            map.fitBounds(bounds, {top: 100, bottom: 100, left: 100, right: 100});
+        }
+        
+    }, [map, driverLocation, nextStopLocation]);
+
+    return null;
+}
+
+const DriverMap: FC<{
+    route: BusRoute;
+    driverLocation: { lat: number; lng: number; };
+    nextStopIndex: number;
+}> = ({ route, driverLocation, nextStopIndex }) => {
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    const { toast } = useToast();
+    const [routePath, setRoutePath] = useState<RoutePath | null>(null);
+    const [isPathLoading, setIsPathLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchPath = async () => {
+            setIsPathLoading(true);
+            try {
+                const { path } = await getRoutePath({ stops: route.stops.map(s => s.position) });
+                setRoutePath(path);
+            } catch (error) {
+                console.error("Error fetching route path:", error);
+                toast({
+                  variant: "destructive",
+                  title: "Could not fetch route path",
+                  description: "There was an error fetching the route path from the server.",
+                });
+                setRoutePath(null);
+            } finally {
+                setIsPathLoading(false);
+            }
+        };
+
+        fetchPath();
+    }, [route, toast]);
+
+    if (!apiKey) {
+        return <div className="flex items-center justify-center h-full bg-muted text-destructive text-center p-4">Google Maps API Key is missing.</div>
+    }
+
+    return (
+        <APIProvider apiKey={apiKey}>
+            <Map
+                defaultCenter={{ lat: 22.7196, lng: 75.8577 }}
+                defaultZoom={12}
+                gestureHandling={'greedy'}
+                disableDefaultUI={true}
+                mapId="driver-map"
+            >
+                {driverLocation && (
+                    <>
+                        <BusMarker position={driverLocation} busId="Your Location" />
+                        <FitBoundsToDriver driverLocation={driverLocation} nextStopLocation={route.stops[nextStopIndex]?.position || null} />
+                    </>
+                )}
+                {routePath && (
+                     <Polyline path={routePath} strokeColor="darkgreen" strokeOpacity={0.7} strokeWeight={6} />
+                )}
+                {route.stops.map((stop, index) => (
+                    <StopMarker 
+                        key={`stop-${index}-${stop.name}`} 
+                        position={stop.position} 
+                        stopName={stop.name} 
+                        isSourceOrDest={index === nextStopIndex}
+                    />
+                ))}
+            </Map>
+            {isPathLoading && (
+                <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-card p-2 rounded-md shadow-lg text-sm font-medium">
+                    Drawing route...
+                </div>
+            )}
+        </APIProvider>
+    );
+};
+
 
 export default function DriverPage() {
   const [busId, setBusId] = useState('');
@@ -15,14 +139,36 @@ export default function DriverPage() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [status, setStatus] = useState('Disconnected');
   const [error, setError] = useState<string | null>(null);
+  const [busRoutes, setBusRoutes] = useState<BusRoute[]>([]);
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
   const socket = useRef<Socket | null>(null);
   const watchId = useRef<number | null>(null);
 
   useEffect(() => {
+    const fetchRoutes = async () => {
+        try {
+            const db = getFirestore(app);
+            const routesCollection = collection(db, 'routes');
+            const routesSnapshot = await getDocs(routesCollection);
+            const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BusRoute));
+            setBusRoutes(routesList);
+        } catch (error) {
+            console.error("Error fetching routes from Firestore:", error);
+            setError("Could not load bus routes from database.");
+        }
+    };
+    fetchRoutes();
+  }, []);
+
+  useEffect(() => {
     const storedBusId = localStorage.getItem('liveTrackBusId');
     if (storedBusId) {
       setBusId(storedBusId);
+    }
+    const storedRouteId = localStorage.getItem('liveTrackRouteId');
+    if (storedRouteId) {
+      setSelectedRouteId(storedRouteId);
     }
 
     const newSocket = io();
@@ -48,9 +194,14 @@ export default function DriverPage() {
     localStorage.setItem('liveTrackBusId', newBusId);
   }
 
+  const handleRouteIdChange = (routeId: string) => {
+    setSelectedRouteId(routeId);
+    localStorage.setItem('liveTrackRouteId', routeId);
+  }
+
   const startTracking = () => {
-    if (!busId) {
-      setError('Please enter a Bus ID.');
+    if (!busId || !selectedRouteId) {
+      setError('Please enter a Bus ID and select a route.');
       return;
     }
     setError(null);
@@ -90,7 +241,8 @@ export default function DriverPage() {
       watchId.current = null;
     }
     setIsTracking(false);
-    setLocation(null);
+    // Keep location to show last position on map
+    // setLocation(null); 
     setStatus(socket.current?.connected ? 'Connected' : 'Disconnected');
   };
 
@@ -108,74 +260,164 @@ export default function DriverPage() {
     return 'secondary';
   }
 
+  const selectedRoute = useMemo(() => 
+    selectedRouteId ? busRoutes.find(r => r.id === selectedRouteId) : null,
+    [selectedRouteId, busRoutes]
+  );
+  
+  const nextStopIndex = useMemo(() => {
+    if (!location || !selectedRoute) return 0;
+
+    let closestStopIndex = -1;
+    let minDistance = Infinity;
+
+    // Find the stop the driver is physically closest to
+    selectedRoute.stops.forEach((stop, index) => {
+        const distance = haversineDistance(location, stop.position);
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestStopIndex = index;
+        }
+    });
+
+    // If the driver is very close to a stop, the "next" stop is the one after it.
+    if (minDistance < 50) { // 50 meters threshold
+        return Math.min(closestStopIndex + 1, selectedRoute.stops.length - 1);
+    }
+    
+    // Otherwise, find the next stop on the path
+    // This is a simplified logic, a real app would need to check if a stop has been "visited"
+    // and which direction the bus is heading.
+    // For now, we'll assume the next unvisited stop is the target.
+    // This just returns the closest as a placeholder.
+    return closestStopIndex;
+
+  }, [location, selectedRoute]);
+
+
+  const nextStop = useMemo(() => {
+      if (!selectedRoute || nextStopIndex === -1) return null;
+      return selectedRoute.stops[nextStopIndex];
+  }, [selectedRoute, nextStopIndex]);
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md shadow-2xl">
-        <CardHeader>
-          <div className="flex items-center gap-3 mb-2">
-            <Bus className="h-8 w-8 text-primary" />
-            <CardTitle className="text-3xl font-bold">Driver Panel</CardTitle>
-          </div>
-          <CardDescription>
-            Enter your bus ID and start sharing your location.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="busId">Bus ID</Label>
-            <Input
-              id="busId"
-              placeholder="e.g., Bus-42"
-              value={busId}
-              onChange={handleBusIdChange}
-              disabled={isTracking}
-            />
-          </div>
-          
-          <div className="p-4 rounded-lg bg-muted border space-y-3">
-            <div className='flex justify-between items-center'>
-                <h3 className="font-semibold text-muted-foreground">Status</h3>
-                <Badge variant={getStatusVariant()} className="flex items-center gap-2">
-                    {isTracking ? <Wifi className="h-3 w-3 animate-pulse" /> : <Wifi className="h-3 w-3" />}
-                    {status}
-                </Badge>
-            </div>
+    <main className="flex flex-col md:flex-row h-screen bg-background text-foreground">
+      <div className="w-full md:w-[400px] shrink-0 border-r flex flex-col">
+        <Card className="w-full h-full shadow-none border-0 rounded-none flex flex-col">
+            <CardHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <Bus className="h-8 w-8 text-primary" />
+                <CardTitle className="text-3xl font-bold">Driver Panel</CardTitle>
+              </div>
+              <CardDescription>
+                Select your route, start tracking, and see your live navigation.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6 flex-grow">
+              <div className="space-y-2">
+                <Label htmlFor="busId">Bus ID</Label>
+                <Input
+                  id="busId"
+                  placeholder="e.g., Bus-42"
+                  value={busId}
+                  onChange={handleBusIdChange}
+                  disabled={isTracking}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="routeId">Route</Label>
+                <Select onValueChange={handleRouteIdChange} value={selectedRouteId || ""} disabled={isTracking}>
+                    <SelectTrigger id="routeId" className="w-full">
+                        <Route className="h-4 w-4 mr-2 text-muted-foreground" />
+                        <SelectValue placeholder="Select Route" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {busRoutes.map((route) => (
+                            <SelectItem key={route.id} value={route.id}>{route.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-muted border space-y-3">
+                <div className='flex justify-between items-center'>
+                    <h3 className="font-semibold text-muted-foreground">Status</h3>
+                    <Badge variant={getStatusVariant()} className="flex items-center gap-2">
+                        {isTracking ? <Wifi className="h-3 w-3 animate-pulse" /> : <Wifi className="h-3 w-3" />}
+                        {status}
+                    </Badge>
+                </div>
 
-            <div className='flex justify-between items-center text-sm'>
-                <h3 className="font-semibold text-muted-foreground flex items-center gap-2"><MapPin className="h-4 w-4" /> Location</h3>
-                <span className="font-mono text-foreground">
-                    {location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : 'N/A'}
-                </span>
-            </div>
-          </div>
+                <div className='flex justify-between items-center text-sm'>
+                    <h3 className="font-semibold text-muted-foreground flex items-center gap-2"><MapPin className="h-4 w-4" /> Location</h3>
+                    <span className="font-mono text-foreground">
+                        {location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : 'N/A'}
+                    </span>
+                </div>
+              </div>
 
-          {error && (
-            <div className="flex items-center gap-2 text-sm text-destructive-foreground bg-destructive p-3 rounded-md">
-                <AlertTriangle className="h-4 w-4" />
-                <p>{error}</p>
-            </div>
-          )}
-        </CardContent>
-        <CardFooter>
-          <Button
-            onClick={handleToggleTracking}
-            className="w-full transition-all duration-300"
-            variant={isTracking ? 'destructive' : 'default'}
-            size="lg"
-            disabled={!busId}
-          >
-            {isTracking ? (
-              <>
-                <StopCircle className="mr-2 h-5 w-5" /> Stop Tracking
-              </>
-            ) : (
-              <>
-                <PlayCircle className="mr-2 h-5 w-5" /> Start Tracking
-              </>
+            {isTracking && nextStop && (
+                <div className="p-4 rounded-lg bg-primary/10 border-2 border-dashed border-primary space-y-2 text-center">
+                    <div className="text-sm font-semibold text-primary flex items-center justify-center gap-2">
+                        <Navigation className="h-4 w-4" />
+                        Next Stop
+                    </div>
+                    <p className="text-2xl font-bold text-primary-foreground bg-primary rounded-md p-2 flex items-center justify-center gap-3">
+                        <Flag className="h-6 w-6" />
+                        {nextStop.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Scheduled for {nextStop.scheduledTime}</p>
+                </div>
             )}
-          </Button>
-        </CardFooter>
-      </Card>
+
+
+              {error && (
+                <div className="flex items-center gap-2 text-sm text-destructive-foreground bg-destructive p-3 rounded-md">
+                    <AlertTriangle className="h-4 w-4" />
+                    <p>{error}</p>
+                </div>
+              )}
+            </CardContent>
+            <CardFooter>
+              <Button
+                onClick={handleToggleTracking}
+                className="w-full transition-all duration-300"
+                variant={isTracking ? 'destructive' : 'default'}
+                size="lg"
+                disabled={!busId || !selectedRouteId}
+              >
+                {isTracking ? (
+                  <>
+                    <StopCircle className="mr-2 h-5 w-5" /> Stop Tracking
+                  </>
+                ) : (
+                  <>
+                    <PlayCircle className="mr-2 h-5 w-5" /> Start Tracking
+                  </>
+                )}
+              </Button>
+            </CardFooter>
+        </Card>
+      </div>
+
+      <div className="flex-grow h-1/2 md:h-full bg-muted">
+        {isTracking && selectedRoute && location ? (
+            <DriverMap 
+                route={selectedRoute} 
+                driverLocation={location}
+                nextStopIndex={nextStopIndex}
+            />
+        ) : (
+            <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8">
+                <MapPin size={48} className="text-muted-foreground" />
+                <h3 className="text-xl font-semibold">Your Map Will Appear Here</h3>
+                <p className="text-muted-foreground">Please select a route and start tracking to see your live position and navigation.</p>
+            </div>
+        )}
+      </div>
+
     </main>
   );
 }
+
+    
