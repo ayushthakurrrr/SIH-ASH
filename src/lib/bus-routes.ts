@@ -96,5 +96,15 @@ export const busRoutes: BusRoute[] = [
             { name: 'Bypass Road', position: { lat: 22.730, lng: 75.940 }, scheduledTime: '05:40 PM' },
             { name: 'Rau Circle', position: { lat: 22.650, lng: 75.820 }, scheduledTime: '06:00 PM' },
         ],
+    },
+    {
+        id: 'route-9',
+        name: 'Route 9: Dewas Link',
+        buses: ['MP-41-1Q', 'MP-41-2R'],
+        stops: [
+            { name: 'Ujjain Dewas Bypass', position: { lat: 22.984, lng: 76.046 }, scheduledTime: '08:00 AM' },
+            { name: 'Dewas Bus Stand', position: { lat: 22.964, lng: 76.061 }, scheduledTime: '08:15 AM' },
+            { name: 'Tata International Dewas', position: { lat: 22.955, lng: 76.004 }, scheduledTime: '08:30 AM' },
+        ],
     }
 ];
