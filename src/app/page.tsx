@@ -3,16 +3,41 @@
 import { useState, useEffect, type FC } from 'react';
 import { APIProvider, Map } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
-import { Bus, WifiOff } from 'lucide-react';
+import { Bus, WifiOff, Route } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { busRoutes, type BusRoute } from '@/lib/bus-routes';
 
 type BusLocations = Record<string, { lat: number; lng: number }>;
 
-const Header: FC = () => (
-  <header className="flex items-center gap-3 p-4 bg-card border-b shadow-sm">
-    <Bus size={32} className="text-primary" />
-    <h1 className="text-2xl font-bold text-foreground">LiveTrack</h1>
+const Header: FC<{
+  selectedRoute: string | null;
+  onRouteSelect: (routeId: string) => void;
+  busCount: number;
+}> = ({ selectedRoute, onRouteSelect, busCount }) => (
+  <header className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-card border-b shadow-sm">
+    <div className="flex items-center gap-3">
+      <Bus size={32} className="text-primary" />
+      <h1 className="text-2xl font-bold text-foreground">LiveTrack</h1>
+    </div>
+    <div className="flex items-center gap-4 w-full md:w-auto">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground ml-auto">
+            <span>{busCount} {busCount === 1 ? 'Bus' : 'Buses'} Online</span>
+        </div>
+        <Select onValueChange={(value) => onRouteSelect(value)} defaultValue={selectedRoute || undefined}>
+            <SelectTrigger className="w-full md:w-[280px]">
+                <Route className="h-4 w-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Select a Bus Route" />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectItem value="all">All Routes</SelectItem>
+                {busRoutes.map((route) => (
+                    <SelectItem key={route.id} value={route.id}>{route.name}</SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    </div>
   </header>
 );
 
@@ -30,23 +55,22 @@ const MissingApiKey: FC = () => (
 
 export default function UserMapPage() {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-  const [buses, setBuses] = useState<BusLocations>({});
-  const [socket, setSocket] = useState<Socket | null>(null);
-
+  const [allBuses, setAllBuses] = useState<BusLocations>({});
+  const [selectedRouteId, setSelectedRouteId] = useState<string>('all');
+  
   useEffect(() => {
     const newSocket = io();
-    setSocket(newSocket);
 
     newSocket.on('connect', () => {
       console.log('Connected to server');
     });
 
     newSocket.on('initialLocations', (initialBuses: BusLocations) => {
-      setBuses(initialBuses);
+      setAllBuses(initialBuses);
     });
 
     newSocket.on('locationUpdate', (data: LocationUpdate) => {
-      setBuses((prevBuses) => ({
+      setAllBuses((prevBuses) => ({
         ...prevBuses,
         [data.busId]: data.location,
       }));
@@ -63,9 +87,31 @@ export default function UserMapPage() {
   
   const mapCenter = { lat: 37.7749, lng: -122.4194 }; // San Francisco
 
+  const getVisibleBuses = () => {
+    if (selectedRouteId === 'all') {
+      return allBuses;
+    }
+    const selectedRoute = busRoutes.find(route => route.id === selectedRouteId);
+    if (!selectedRoute) return {};
+
+    const visibleBuses: BusLocations = {};
+    for (const busId of selectedRoute.buses) {
+        if(allBuses[busId]) {
+            visibleBuses[busId] = allBuses[busId];
+        }
+    }
+    return visibleBuses;
+  }
+  
+  const visibleBuses = getVisibleBuses();
+
   return (
     <div className="flex flex-col h-screen bg-background">
-      <Header />
+      <Header 
+        selectedRoute={selectedRouteId}
+        onRouteSelect={setSelectedRouteId}
+        busCount={Object.keys(visibleBuses).length}
+      />
       <main className="flex-grow">
         {apiKey ? (
           <APIProvider apiKey={apiKey}>
@@ -76,7 +122,7 @@ export default function UserMapPage() {
               disableDefaultUI={true}
               mapId="livetrack-map"
             >
-              {Object.entries(buses).map(([id, pos]) => (
+              {Object.entries(visibleBuses).map(([id, pos]) => (
                 <BusMarker key={id} position={pos} busId={id} />
               ))}
             </Map>
