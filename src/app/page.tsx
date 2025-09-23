@@ -14,6 +14,7 @@ import { getEta } from '@/ai/flows/get-eta-flow';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { useToast } from "@/hooks/use-toast";
 
 type BusLocations = Record<string, { lat: number; lng: number }>;
 type Etas = Record<string, { duration: number, distance: number } | null>;
@@ -170,6 +171,7 @@ export default function UserMapPage() {
   const [isEtaLoading, setIsEtaLoading] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [showFullPath, setShowFullPath] = useState(false);
+  const { toast } = useToast();
   
   useEffect(() => {
     const newSocket = io();
@@ -215,12 +217,17 @@ export default function UserMapPage() {
       } else {
         setSelectedRouteId(null);
         setIsPanelOpen(false);
+        toast({
+          title: "No Route Found",
+          description: "No direct bus route found for the selected stops.",
+          variant: "destructive",
+        })
       }
     } else {
       setSelectedRouteId(null);
       setIsPanelOpen(false);
     }
-  }, [sourceStop, destinationStop]);
+  }, [sourceStop, destinationStop, toast]);
 
   const selectedRoute = useMemo(() => 
     selectedRouteId ? busRoutes.find(r => r.id === selectedRouteId) : null,
