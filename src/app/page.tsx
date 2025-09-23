@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, type FC, useCallback } from 'react';
 import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
-import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin, X } from 'lucide-react';
+import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin, X, RefreshCw } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
@@ -33,8 +33,9 @@ const Header: FC<{
   onSourceSelect: (stop: string) => void;
   onDestinationSelect: (stop: string) => void;
   onClear: () => void;
+  onRefresh: () => void;
   busCount: number;
-}> = ({ busRoutes, selectedRouteId, source, destination, onRouteSelect, onSourceSelect, onDestinationSelect, onClear, busCount }) => {
+}> = ({ busRoutes, selectedRouteId, source, destination, onRouteSelect, onSourceSelect, onDestinationSelect, onClear, onRefresh, busCount }) => {
   const selectedRouteStops = useMemo(() => {
     if (!selectedRouteId) return [];
     const route = busRoutes.find(r => r.id === selectedRouteId);
@@ -85,9 +86,14 @@ const Header: FC<{
             ))}
           </SelectContent>
         </Select>
-        <Button variant="ghost" size="icon" onClick={onClear} aria-label="Clear selection">
-          <X className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" onClick={onRefresh} aria-label="Refresh buses">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={onClear} aria-label="Clear selection">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </header>
   );
@@ -241,9 +247,11 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   const [showFullPath, setShowFullPath] = useState(true);
   const [routePath, setRoutePath] = useState<RoutePath | null>(null);
   const [isPathLoading, setIsPathLoading] = useState(false);
+  const socketRef = React.useRef<Socket | null>(null);
   
   useEffect(() => {
     const newSocket = io();
+    socketRef.current = newSocket;
 
     newSocket.on('connect', () => {
       console.log('Connected to server');
@@ -375,6 +383,14 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
     setSelectedRouteId(null);
     setIsPanelOpen(false);
     setRoutePath(null);
+  }, []);
+  
+  const handleRefresh = useCallback(() => {
+    socketRef.current?.emit('requestInitialLocations');
+    toast({
+        title: "Buses Refreshed",
+        description: "The bus locations have been updated.",
+    });
   }, []);
 
   useEffect(() => {
@@ -523,6 +539,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         onSourceSelect={handleSourceSelect}
         onDestinationSelect={handleDestinationSelect}
         onClear={handleClear}
+        onRefresh={handleRefresh}
         busCount={Object.keys(allBuses).length}
       />
       <main className="flex-grow flex flex-col overflow-hidden">

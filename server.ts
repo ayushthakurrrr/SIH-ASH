@@ -33,6 +33,11 @@ app.prepare().then(() => {
 
     // Send initial locations to the newly connected client
     socket.emit('initialLocations', busLocations);
+    
+    // Add listener for manual refresh requests
+    socket.on('requestInitialLocations', () => {
+      socket.emit('initialLocations', busLocations);
+    });
 
     socket.on('updateLocation', (data: LocationUpdate) => {
       if(data.busId && data.location) {
