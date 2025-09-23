@@ -19,54 +19,74 @@ import { useToast } from "@/hooks/use-toast";
 type BusLocations = Record<string, { lat: number; lng: number }>;
 type Etas = Record<string, { duration: number, distance: number } | null>;
 
-const allStops = busRoutes.flatMap(route => route.stops.map(stop => stop.name));
-const uniqueStops = [...new Set(allStops)];
-
 const Header: FC<{
+  selectedRouteId: string | null;
   source: string | null;
   destination: string | null;
+  onRouteSelect: (routeId: string) => void;
   onSourceSelect: (stop: string) => void;
   onDestinationSelect: (stop: string) => void;
   onClear: () => void;
   busCount: number;
-}> = ({ source, destination, onSourceSelect, onDestinationSelect, onClear, busCount }) => (
-  <header className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-card border-b shadow-sm z-10 shrink-0">
-    <div className="flex items-center gap-3">
-      <Bus size={32} className="text-primary" />
-      <h1 className="text-2xl font-bold text-foreground">LiveTrack</h1>
-    </div>
-    <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground ml-auto">
-          <span>{busCount} {busCount === 1 ? 'Bus' : 'Buses'} Online</span>
+}> = ({ selectedRouteId, source, destination, onRouteSelect, onSourceSelect, onDestinationSelect, onClear, busCount }) => {
+  const selectedRouteStops = useMemo(() => {
+    if (!selectedRouteId) return [];
+    const route = busRoutes.find(r => r.id === selectedRouteId);
+    return route ? route.stops.map(s => s.name) : [];
+  }, [selectedRouteId]);
+
+  return (
+    <header className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-card border-b shadow-sm z-10 shrink-0">
+      <div className="flex items-center gap-3">
+        <Bus size={32} className="text-primary" />
+        <h1 className="text-2xl font-bold text-foreground">LiveTrack</h1>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground ml-4">
+            <span>{busCount} {busCount === 1 ? 'Bus' : 'Buses'} Online</span>
+        </div>
       </div>
-      <Select onValueChange={onSourceSelect} value={source || undefined}>
-        <SelectTrigger className="w-full md:w-[240px]">
-          <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
-          <SelectValue placeholder="Select Source" />
-        </SelectTrigger>
-        <SelectContent>
-          {uniqueStops.map((stop) => (
-            <SelectItem key={`source-${stop}`} value={stop}>{stop}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Select onValueChange={onDestinationSelect} value={destination || undefined}>
-        <SelectTrigger className="w-full md:w-[240px]">
-          <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
-          <SelectValue placeholder="Select Destination" />
-        </SelectTrigger>
-        <SelectContent>
-          {uniqueStops.map((stop) => (
-            <SelectItem key={`dest-${stop}`} value={stop}>{stop}</SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button variant="ghost" size="icon" onClick={onClear} aria-label="Clear selection">
-        <X className="h-4 w-4" />
-      </Button>
-    </div>
-  </header>
-);
+      <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+        <Select onValueChange={onRouteSelect} value={selectedRouteId || "all"}>
+            <SelectTrigger className="w-full md:w-[180px]">
+                <Route className="h-4 w-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Select Route" />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectItem value="all">All Routes</SelectItem>
+                {busRoutes.map((route) => (
+                    <SelectItem key={route.id} value={route.id}>{route.name}</SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+        <Select onValueChange={onSourceSelect} value={source || undefined} disabled={!selectedRouteId}>
+          <SelectTrigger className="w-full md:w-[200px]">
+            <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
+            <SelectValue placeholder="Select Source" />
+          </SelectTrigger>
+          <SelectContent>
+            {selectedRouteStops.map((stop) => (
+              <SelectItem key={`source-${stop}`} value={stop}>{stop}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select onValueChange={onDestinationSelect} value={destination || undefined} disabled={!selectedRouteId}>
+          <SelectTrigger className="w-full md:w-[200px]">
+            <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
+            <SelectValue placeholder="Select Destination" />
+          </SelectTrigger>
+          <SelectContent>
+            {selectedRouteStops.map((stop) => (
+              <SelectItem key={`dest-${stop}`} value={stop}>{stop}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button variant="ghost" size="icon" onClick={onClear} aria-label="Clear selection">
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    </header>
+  );
+};
+
 
 const MissingApiKey: FC = () => (
   <div className="flex flex-col items-center justify-center h-full gap-4 text-center bg-muted/50">
@@ -174,8 +194,7 @@ export default function UserMapPage() {
   const [etas, setEtas] = useState<Etas>({});
   const [isEtaLoading, setIsEtaLoading] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
-  const [showFullPath, setShowFullPath] = useState(false);
-  const { toast } = useToast();
+  const [showFullPath, setShowFullPath] = useState(true);
   
   useEffect(() => {
     const newSocket = io();
@@ -207,31 +226,23 @@ export default function UserMapPage() {
   const mapCenter = { lat: 22.7196, lng: 75.8577 }; // Indore
 
   useEffect(() => {
-    if (sourceStop && destinationStop && sourceStop !== destinationStop) {
-      const foundRoute = busRoutes.find(route => {
-        const sourceIndex = route.stops.findIndex(s => s.name === sourceStop);
-        const destIndex = route.stops.findIndex(s => s.name === destinationStop);
-        return sourceIndex !== -1 && destIndex !== -1 && sourceIndex < destIndex;
-      });
-
-      if (foundRoute) {
-        setSelectedRouteId(foundRoute.id);
-        setIsPanelOpen(true);
-        setShowFullPath(false); // Reset to default view when new route is selected
-      } else {
-        setSelectedRouteId(null);
-        setIsPanelOpen(false);
-        toast({
-          title: "No Route Found",
-          description: "No direct bus route found for the selected stops.",
-          variant: "destructive",
-        })
-      }
-    } else if (!sourceStop && !destinationStop) {
-      setSelectedRouteId(null);
-      setIsPanelOpen(false);
+    if (selectedRouteId) {
+      setIsPanelOpen(true);
     }
-  }, [sourceStop, destinationStop, toast]);
+  
+    if (sourceStop && destinationStop) {
+        const sourceIndex = busRoutes.find(r => r.id === selectedRouteId)?.stops.findIndex(s => s.name === sourceStop) ?? -1;
+        const destIndex = busRoutes.find(r => r.id === selectedRouteId)?.stops.findIndex(s => s.name === destinationStop) ?? -1;
+
+        if (sourceIndex !== -1 && destIndex !== -1 && sourceIndex < destIndex) {
+            setShowFullPath(false);
+        } else {
+            setShowFullPath(true);
+        }
+    } else {
+        setShowFullPath(true);
+    }
+  }, [sourceStop, destinationStop, selectedRouteId]);
 
   const selectedRoute = useMemo(() => 
     selectedRouteId ? busRoutes.find(r => r.id === selectedRouteId) : null,
@@ -250,6 +261,17 @@ export default function UserMapPage() {
     return visible;
   }, [allBuses, selectedRoute]);
   
+  const handleRouteSelect = useCallback((routeId: string) => {
+    if (routeId === "all") {
+        setSelectedRouteId(null);
+        setIsPanelOpen(false);
+    } else {
+        setSelectedRouteId(routeId);
+    }
+    setSourceStop(null);
+    setDestinationStop(null);
+  }, []);
+  
   const handleSourceSelect = useCallback((stop: string) => {
     setSourceStop(stop);
   }, []);
@@ -261,6 +283,8 @@ export default function UserMapPage() {
   const handleClear = useCallback(() => {
     setSourceStop(null);
     setDestinationStop(null);
+    setSelectedRouteId(null);
+    setIsPanelOpen(false);
   }, []);
 
   useEffect(() => {
@@ -301,9 +325,14 @@ export default function UserMapPage() {
           let closestBus: {id: string, location: {lat: number, lng: number}, distance: number} | null = null;
           
           for (const busId in visibleBuses) {
-              const distance = haversineDistance(visibleBuses[busId], stop.position);
+              // Only consider buses that are "behind" the stop in the route order
+              const busLocation = visibleBuses[busId];
+              // This is a simplified check. A more robust solution would check if the bus
+              // has already passed the stop based on route progression.
+              // For now, we'll get ETA from the nearest bus.
+              const distance = haversineDistance(busLocation, stop.position);
               if (!closestBus || distance < closestBus.distance) {
-                  closestBus = { id: busId, location: visibleBuses[busId], distance };
+                  closestBus = { id: busId, location: busLocation, distance };
               }
           }
           
@@ -333,32 +362,22 @@ export default function UserMapPage() {
   }, [selectedRoute, visibleBuses, isPanelOpen]);
 
   const { pathSegments, allRoutePoints, journeyStops } = useMemo(() => {
-    if (!selectedRoute) return { pathSegments: null, allRoutePoints: [], journeyStops: [] };
+    if (!selectedRoute) return { pathSegments: null, allRoutePoints: Object.values(allBuses), journeyStops: [] };
   
     const sourceIndex = selectedRoute.stops.findIndex(s => s.name === sourceStop);
     const destIndex = selectedRoute.stops.findIndex(s => s.name === destinationStop);
   
     const busPoints = Object.values(visibleBuses);
-    const stopPoints = selectedRoute.stops.map(s => s.position);
     
-    const allPoints = (sourceIndex === -1 || destIndex === -1) 
-      ? [...busPoints, ...stopPoints]
-      : [...busPoints, ...selectedRoute.stops.slice(sourceIndex, destIndex + 1).map(s => s.position)];
-
-
     const stopsToDisplay =
-      showFullPath || sourceIndex === -1 || destIndex === -1
+      showFullPath || sourceIndex === -1 || destIndex === -1 || sourceIndex >= destIndex
         ? selectedRoute.stops
         : selectedRoute.stops.slice(sourceIndex, destIndex + 1);
 
-    if (sourceIndex === -1 || destIndex === -1) {
-      return {
-        pathSegments: { before: selectedRoute.path, between: [], after: [] },
-        allRoutePoints: allPoints,
-        journeyStops: stopsToDisplay
-      };
-    }
-    
+    const pointsForBounds = showFullPath || sourceIndex === -1 || destIndex === -1 || sourceIndex >= destIndex
+        ? [...busPoints, ...selectedRoute.stops.map(s => s.position)]
+        : [...busPoints, ...stopsToDisplay.map(s => s.position)];
+
     const findClosestPathIndex = (pos: {lat: number, lng: number}) => {
         let closestIndex = -1;
         let minDistance = Infinity;
@@ -372,6 +391,14 @@ export default function UserMapPage() {
         });
         return closestIndex;
     }
+    
+    if (sourceIndex === -1 || destIndex === -1 || sourceIndex >= destIndex) {
+      return {
+        pathSegments: { before: selectedRoute.path, between: [], after: [] },
+        allRoutePoints: pointsForBounds,
+        journeyStops: stopsToDisplay
+      };
+    }
 
     const sourcePathIndex = findClosestPathIndex(selectedRoute.stops[sourceIndex].position);
     const destPathIndex = findClosestPathIndex(selectedRoute.stops[destIndex].position);
@@ -382,17 +409,19 @@ export default function UserMapPage() {
   
     return {
       pathSegments: { before: pathBefore, between: pathBetween, after: pathAfter },
-      allRoutePoints: allPoints,
+      allRoutePoints: pointsForBounds,
       journeyStops: stopsToDisplay,
     };
-  }, [selectedRoute, sourceStop, destinationStop, visibleBuses, showFullPath]);
+  }, [selectedRoute, sourceStop, destinationStop, visibleBuses, showFullPath, allBuses]);
 
 
   return (
     <div className="flex flex-col h-screen bg-background">
       <Header 
+        selectedRouteId={selectedRouteId}
         source={sourceStop}
         destination={destinationStop}
+        onRouteSelect={handleRouteSelect}
         onSourceSelect={handleSourceSelect}
         onDestinationSelect={handleDestinationSelect}
         onClear={handleClear}
@@ -412,48 +441,39 @@ export default function UserMapPage() {
                 {Object.entries(visibleBuses).map(([id, pos]) => (
                     <BusMarker key={id} position={pos} busId={id} />
                 ))}
-                {selectedRoute && (
+                
+                {allRoutePoints.length > 0 && <FitBounds points={allRoutePoints} />}
+                
+                {selectedRoute && pathSegments && (
                     <>
-                    {allRoutePoints.length > 0 && <FitBounds points={allRoutePoints} />}
-                    {pathSegments ? (
-                        <>
-                            <Polyline
-                                path={pathSegments.before}
-                                strokeColor="darkgreen"
-                                strokeOpacity={0.7}
-                                strokeWeight={6}
-                            />
-                            <Polyline
-                                path={pathSegments.between}
-                                strokeColor="lightgreen"
-                                strokeOpacity={0.7}
-                                strokeWeight={8}
-                            />
-                            <Polyline
-                                path={pathSegments.after}
-                                strokeColor="darkgreen"
-                                strokeOpacity={0.7}
-                                strokeWeight={6}
-                            />
-                        </>
-                    ) : (
-                         <Polyline
-                            path={selectedRoute.path}
+                        <Polyline
+                            path={pathSegments.before}
                             strokeColor="darkgreen"
+                            strokeOpacity={0.7}
+                            strokeWeight={6}
+                        />
+                        <Polyline
+                            path={pathSegments.between}
+                            strokeColor="lightgreen"
                             strokeOpacity={0.7}
                             strokeWeight={8}
                         />
-                    )}
-                    {selectedRoute.stops.map((stop, index) => (
-                        <StopMarker 
-                            key={`stop-${index}-${stop.name}`} 
-                            position={stop.position} 
-                            stopName={stop.name} 
-                            isSourceOrDest={stop.name === sourceStop || stop.name === destinationStop}
+                        <Polyline
+                            path={pathSegments.after}
+                            strokeColor="darkgreen"
+                            strokeOpacity={0.7}
+                            strokeWeight={6}
                         />
-                    ))}
                     </>
                 )}
+                {selectedRoute?.stops.map((stop, index) => (
+                    <StopMarker 
+                        key={`stop-${index}-${stop.name}`} 
+                        position={stop.position} 
+                        stopName={stop.name} 
+                        isSourceOrDest={stop.name === sourceStop || stop.name === destinationStop}
+                    />
+                ))}
                 </Map>
             </APIProvider>
             ) : (
@@ -481,6 +501,7 @@ export default function UserMapPage() {
                     <div className="h-[40vh] flex flex-col">
                         <div className="p-4 pb-2 flex justify-between items-center">
                             <h2 className="text-2xl font-bold">{selectedRoute.name}</h2>
+                            {sourceStop && destinationStop && (
                              <Button
                                 variant="outline"
                                 size="sm"
@@ -488,6 +509,7 @@ export default function UserMapPage() {
                              >
                                 {showFullPath ? 'Show Journey' : 'Show Full Path'}
                              </Button>
+                            )}
                         </div>
                         <ScrollArea className="flex-grow">
                             <div className="p-6 pt-0 space-y-6">
