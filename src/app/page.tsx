@@ -171,23 +171,36 @@ export default function UserMapPage() {
     }
   }, []);
 
-  const haversineDistance = (coords1: {lat: number, lng: number}, coords2: {lat: number, lng: number}) => {
-    const R = 6371; // Radius of the Earth in km
-    const dLat = (coords2.lat - coords1.lat) * Math.PI / 180;
-    const dLng = (coords2.lng - coords1.lng) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.cos(coords1.lat * Math.PI / 180) * Math.cos(coords2.lat * Math.PI / 180) *
-              Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  }
-
   useEffect(() => {
-    if (!selectedRoute || Object.keys(visibleBuses).length === 0 || !isPanelOpen) {
+    if (!selectedRoute || !isPanelOpen) {
       setEtas({});
       return;
     }
 
+    // Fill with dummy data for now
+    const dummyEtas: Etas = {};
+    let duration = 5 * 60; // 5 minutes
+    let distance = 1500; // 1.5 km
+
+    for (const stop of selectedRoute.stops) {
+      // For some variety, make some stops have no bus
+      if (Math.random() > 0.8 && Object.keys(visibleBuses).length > 0) {
+        dummyEtas[stop.name] = null;
+      } else if (Object.keys(visibleBuses).length > 0) {
+        dummyEtas[stop.name] = {
+          duration: duration,
+          distance: distance,
+        };
+        duration += (Math.random() * 5 + 2) * 60; // Add 2-7 minutes
+        distance += (Math.random() * 2 + 1) * 1000; // Add 1-3 km
+      } else {
+        dummyEtas[stop.name] = null;
+      }
+    }
+    setEtas(dummyEtas);
+    
+    // The original logic is commented out below
+    /*
     const calculateEtas = async () => {
         setIsEtaLoading(true);
         const newEtas: Etas = {};
@@ -222,8 +235,9 @@ export default function UserMapPage() {
     
     calculateEtas();
     
-    const intervalId = setInterval(calculateEtas, 30000); // Refresh ETAs every 30 seconds
+    const intervalId = setInterval(calculateEtas, 30000);
     return () => clearInterval(intervalId);
+    */
 
   }, [selectedRoute, visibleBuses, isPanelOpen]);
 
