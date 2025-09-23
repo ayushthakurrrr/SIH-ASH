@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, type FC, useCallback } from 'react';
 import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
-import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp } from 'lucide-react';
+import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
@@ -17,32 +17,47 @@ import { Skeleton } from '@/components/ui/skeleton';
 type BusLocations = Record<string, { lat: number; lng: number }>;
 type Etas = Record<string, { duration: number, distance: number } | null>;
 
+const allStops = busRoutes.flatMap(route => route.stops.map(stop => stop.name));
+const uniqueStops = [...new Set(allStops)];
+
 const Header: FC<{
-  selectedRoute: string | null;
-  onRouteSelect: (routeId: string) => void;
+  source: string | null;
+  destination: string | null;
+  onSourceSelect: (stop: string) => void;
+  onDestinationSelect: (stop: string) => void;
   busCount: number;
-}> = ({ selectedRoute, onRouteSelect, busCount }) => (
+}> = ({ source, destination, onSourceSelect, onDestinationSelect, busCount }) => (
   <header className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-card border-b shadow-sm z-10 shrink-0">
     <div className="flex items-center gap-3">
       <Bus size={32} className="text-primary" />
       <h1 className="text-2xl font-bold text-foreground">LiveTrack</h1>
     </div>
-    <div className="flex items-center gap-4 w-full md:w-auto">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground ml-auto">
-            <span>{busCount} {busCount === 1 ? 'Bus' : 'Buses'} Online</span>
-        </div>
-        <Select onValueChange={onRouteSelect} value={selectedRoute || undefined}>
-            <SelectTrigger className="w-full md:w-[280px]">
-                <Route className="h-4 w-4 mr-2 text-muted-foreground" />
-                <SelectValue placeholder="Select a Bus Route" />
-            </SelectTrigger>
-            <SelectContent>
-                <SelectItem value="all">All Routes</SelectItem>
-                {busRoutes.map((route) => (
-                    <SelectItem key={route.id} value={route.id}>{route.name}</SelectItem>
-                ))}
-            </SelectContent>
-        </Select>
+    <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground ml-auto">
+          <span>{busCount} {busCount === 1 ? 'Bus' : 'Buses'} Online</span>
+      </div>
+      <Select onValueChange={onSourceSelect} value={source || undefined}>
+        <SelectTrigger className="w-full md:w-[240px]">
+          <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
+          <SelectValue placeholder="Select Source" />
+        </SelectTrigger>
+        <SelectContent>
+          {uniqueStops.map((stop) => (
+            <SelectItem key={`source-${stop}`} value={stop}>{stop}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select onValueChange={onDestinationSelect} value={destination || undefined}>
+        <SelectTrigger className="w-full md:w-[240px]">
+          <MapPin className="h-4 w-4 mr-2 text-muted-foreground" />
+          <SelectValue placeholder="Select Destination" />
+        </SelectTrigger>
+        <SelectContent>
+          {uniqueStops.map((stop) => (
+            <SelectItem key={`dest-${stop}`} value={stop}>{stop}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   </header>
 );
@@ -147,7 +162,9 @@ const FitBounds: FC<{ points: { lat: number; lng: number }[] }> = ({ points }) =
 export default function UserMapPage() {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const [allBuses, setAllBuses] = useState<BusLocations>({});
-  const [selectedRouteId, setSelectedRouteId] = useState<string>('all');
+  const [sourceStop, setSourceStop] = useState<string | null>(null);
+  const [destinationStop, setDestinationStop] = useState<string | null>(null);
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [etas, setEtas] = useState<Etas>({});
   const [isEtaLoading, setIsEtaLoading] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
@@ -181,12 +198,34 @@ export default function UserMapPage() {
   
   const mapCenter = { lat: 22.7196, lng: 75.8577 }; // Indore
 
+  useEffect(() => {
+    if (sourceStop && destinationStop && sourceStop !== destinationStop) {
+      const foundRoute = busRoutes.find(route => {
+        const sourceIndex = route.stops.findIndex(s => s.name === sourceStop);
+        const destIndex = route.stops.findIndex(s => s.name === destinationStop);
+        return sourceIndex !== -1 && destIndex !== -1 && sourceIndex < destIndex;
+      });
+
+      if (foundRoute) {
+        setSelectedRouteId(foundRoute.id);
+        setIsPanelOpen(true);
+      } else {
+        setSelectedRouteId(null);
+        setIsPanelOpen(false);
+      }
+    } else {
+      setSelectedRouteId(null);
+      setIsPanelOpen(false);
+    }
+  }, [sourceStop, destinationStop]);
+
   const selectedRoute = useMemo(() => 
-    selectedRouteId !== 'all' ? busRoutes.find(r => r.id === selectedRouteId) : null,
+    selectedRouteId ? busRoutes.find(r => r.id === selectedRouteId) : null,
   [selectedRouteId]);
   
   const visibleBuses = useMemo(() => {
     if (!selectedRoute) {
+      // Show all buses if no route is selected
       return allBuses;
     }
     const visible: BusLocations = {};
@@ -198,14 +237,12 @@ export default function UserMapPage() {
     return visible;
   }, [allBuses, selectedRoute]);
   
-  const handleRouteSelect = useCallback((routeId: string) => {
-    setSelectedRouteId(routeId);
-    setEtas({});
-    if(routeId === 'all' || !routeId) {
-        setIsPanelOpen(false);
-    } else {
-        setIsPanelOpen(true);
-    }
+  const handleSourceSelect = useCallback((stop: string) => {
+    setSourceStop(stop);
+  }, []);
+
+  const handleDestinationSelect = useCallback((stop: string) => {
+    setDestinationStop(stop);
   }, []);
 
   useEffect(() => {
@@ -271,9 +308,27 @@ export default function UserMapPage() {
       setIsEtaLoading(false);
     }
     
-    calculateEtas();
+    // Use dummy data for now
+    const useDummyData = () => {
+        if (!selectedRoute) return;
+        setIsEtaLoading(true);
+        const dummyEtas: Etas = {};
+        selectedRoute.stops.forEach((stop, index) => {
+            dummyEtas[stop.name] = {
+                duration: (index + 1) * 5 * 60, // 5, 10, 15... minutes
+                distance: (index + 1) * 1200, // 1.2, 2.4, 3.6... km
+            };
+        });
+        setTimeout(() => {
+            setEtas(dummyEtas);
+            setIsEtaLoading(false);
+        }, 1000)
+    };
     
-    const intervalId = setInterval(calculateEtas, 30000);
+    // calculateEtas();
+    useDummyData();
+    
+    const intervalId = setInterval(useDummyData, 30000);
     return () => clearInterval(intervalId);
 
   }, [selectedRoute, visibleBuses, isPanelOpen]);
@@ -288,9 +343,11 @@ export default function UserMapPage() {
   return (
     <div className="flex flex-col h-screen bg-background">
       <Header 
-        selectedRoute={selectedRouteId}
-        onRouteSelect={handleRouteSelect}
-        busCount={Object.keys(visibleBuses).length}
+        source={sourceStop}
+        destination={destinationStop}
+        onSourceSelect={handleSourceSelect}
+        onDestinationSelect={handleDestinationSelect}
+        busCount={Object.keys(allBuses).length}
       />
       <main className="flex-grow flex flex-col overflow-hidden">
         <div className="flex-grow h-full relative">
@@ -335,11 +392,11 @@ export default function UserMapPage() {
                 >
                     {isPanelOpen ? (
                         <>
-                            <ChevronDown className="mr-2" /> Hide Stops
+                            <ChevronDown className="mr-2 h-4 w-4" /> Hide Stops
                         </>
                     ) : (
                         <>
-                            <ChevronUp className="mr-2" /> View Stops
+                            <ChevronUp className="mr-2 h-4 w-4" /> View Stops
                         </>
                     )}
                 </button>
