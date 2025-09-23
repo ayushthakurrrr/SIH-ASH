@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, type FC } from 'react';
-import { APIProvider, Map } from '@vis.gl/react-google-maps';
+import { useState, useEffect, useMemo, type FC } from 'react';
+import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
-import { Bus, WifiOff, Route, Clock, PersonStanding, X, GripHorizontal } from 'lucide-react';
+import { Bus, WifiOff, Route, Clock, PersonStanding, X, GripHorizontal, View } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
@@ -14,17 +14,17 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { getEta } from '@/ai/flows/get-eta-flow';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 
 type BusLocations = Record<string, { lat: number; lng: number }>;
 type Etas = Record<string, { duration: number, distance: number } | null>;
-
 
 const Header: FC<{
   selectedRoute: string | null;
   onRouteSelect: (routeId: string) => void;
   busCount: number;
 }> = ({ selectedRoute, onRouteSelect, busCount }) => (
-  <header className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-card border-b shadow-sm">
+  <header className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-card border-b shadow-sm z-10">
     <div className="flex items-center gap-3">
       <Bus size={32} className="text-primary" />
       <h1 className="text-2xl font-bold text-foreground">LiveTrack</h1>
@@ -99,12 +99,33 @@ const EtaDisplay: FC<{stopName: string, eta: {duration: number, distance: number
     )
 }
 
+const FitBounds: FC<{ points: { lat: number; lng: number }[] }> = ({ points }) => {
+    const map = useMap();
+
+    useEffect(() => {
+        if (!map || points.length === 0) return;
+
+        if (points.length === 1) {
+            map.setCenter(points[0]);
+            map.setZoom(14);
+            return;
+        }
+
+        const bounds = new google.maps.LatLngBounds();
+        points.forEach(point => bounds.extend(point));
+        map.fitBounds(bounds, 100); // 100 is padding in pixels
+    }, [map, points]);
+
+    return null;
+}
+
 export default function UserMapPage() {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const [allBuses, setAllBuses] = useState<BusLocations>({});
   const [selectedRouteId, setSelectedRouteId] = useState<string>('all');
   const [etas, setEtas] = useState<Etas>({});
   const [isEtaLoading, setIsEtaLoading] = useState(false);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
   
   useEffect(() => {
     const newSocket = io();
@@ -155,6 +176,11 @@ export default function UserMapPage() {
   const handleRouteSelect = (routeId: string) => {
     setSelectedRouteId(routeId);
     setEtas({});
+    if(routeId === 'all') {
+        setIsPanelOpen(false);
+    } else {
+        setIsPanelOpen(true);
+    }
   }
 
   const haversineDistance = (coords1: {lat: number, lng: number}, coords2: {lat: number, lng: number}) => {
@@ -169,7 +195,7 @@ export default function UserMapPage() {
   }
 
   useEffect(() => {
-    if (!selectedRoute || Object.keys(visibleBuses).length === 0) {
+    if (!selectedRoute || Object.keys(visibleBuses).length === 0 || !isPanelOpen) {
       setEtas({});
       return;
     }
@@ -211,7 +237,12 @@ export default function UserMapPage() {
     const intervalId = setInterval(calculateEtas, 30000); // Refresh ETAs every 30 seconds
     return () => clearInterval(intervalId);
 
-  }, [selectedRoute, allBuses]);
+  }, [selectedRoute, visibleBuses, isPanelOpen]);
+
+  const allRoutePoints = useMemo(() => {
+    if (!selectedRoute) return [];
+    return [...selectedRoute.path, ...selectedRoute.stops.map(s => s.position)];
+  }, [selectedRoute]);
 
 
   return (
@@ -221,8 +252,8 @@ export default function UserMapPage() {
         onRouteSelect={handleRouteSelect}
         busCount={Object.keys(visibleBuses).length}
       />
-      <main className="flex-grow flex relative">
-        <div className='flex-grow'>
+      <main className="flex-grow flex relative overflow-hidden">
+        <div className='flex-grow h-full'>
             {apiKey ? (
             <APIProvider apiKey={apiKey}>
                 <Map
@@ -237,6 +268,7 @@ export default function UserMapPage() {
                 ))}
                 {selectedRoute && (
                     <>
+                    <FitBounds points={allRoutePoints} />
                     <Polyline
                         path={selectedRoute.path}
                         strokeColor="hsl(var(--primary))"
@@ -255,9 +287,24 @@ export default function UserMapPage() {
             )}
         </div>
 
-        <Sheet open={!!selectedRoute} onOpenChange={(isOpen) => !isOpen && handleRouteSelect('all')}>
-            <SheetContent side="bottom" className="h-[50vh] p-0 flex flex-col"
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
+            <Button 
+                onClick={() => setIsPanelOpen(true)}
+                disabled={!selectedRoute}
+                className="transition-all duration-300"
+                size="lg"
+            >
+                <View className="mr-2" /> View Stops
+            </Button>
+        </div>
+
+
+        <Sheet open={isPanelOpen && !!selectedRoute} onOpenChange={setIsPanelOpen}>
+            <SheetContent 
+                side="bottom" 
+                className="h-[50vh] p-0 flex flex-col"
                 hideCloseButton={true}
+                hideOverlay={true}
             >
                 {selectedRoute && (
                     <>
@@ -267,7 +314,7 @@ export default function UserMapPage() {
                         </div>
                          <div className="flex items-center justify-between">
                             <SheetTitle className="text-2xl">{selectedRoute.name}</SheetTitle>
-                            <button onClick={() => handleRouteSelect('all')} className="p-1 rounded-md hover:bg-muted">
+                            <button onClick={() => setIsPanelOpen(false)} className="p-1 rounded-md hover:bg-muted">
                                <X className="h-5 w-5" />
                             </button>
                         </div>
