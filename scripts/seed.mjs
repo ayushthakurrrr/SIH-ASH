@@ -1,52 +1,57 @@
-import { initializeApp, cert } from 'firebase-admin/app';
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { busRoutes } from '../src/lib/bus-routes.js'; // Use .js extension for ES modules
+import { busRoutes } from '../src/lib/bus-routes.js';
+import 'dotenv/config';
 
-// IMPORTANT: Path to your service account key file
-// Download this from your Firebase Project Settings -> Service Accounts
-const serviceAccount = {
-    "type": "service_account",
-    "project_id": process.env.FIREBASE_PROJECT_ID,
-    "private_key_id": process.env.FIREBASE_PRIVATE_KEY_ID,
-    "private_key": process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-    "client_email": process.env.FIREBASE_CLIENT_EMAIL,
-    "client_id": process.env.FIREBASE_CLIENT_ID,
-    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-    "token_uri": "https://oauth2.googleapis.com/token",
-    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-    "client_x509_cert_url": `https://www.googleapis.com/robot/v1/metadata/x509/${process.env.FIREBASE_CLIENT_EMAIL?.replace('@', '%40')}`
-};
+// This script will seed the bus route data into your Firestore database.
+// It's designed to be run from the command line.
 
 async function seedDatabase() {
-    try {
-        console.log("Initializing Firebase Admin SDK...");
-        initializeApp({
-            credential: cert(serviceAccount)
-        });
+  try {
+    console.log('Initializing Firebase Admin SDK...');
 
-        const db = getFirestore();
-        const routesCollection = db.collection('routes');
-        
-        console.log("Preparing to seed bus routes...");
-        const batch = db.batch();
-
-        busRoutes.forEach(route => {
-            const { id, ...data } = route;
-            const docRef = routesCollection.doc(id);
-            // The 'path' property is removed from the data before seeding
-            const { path, ...routeData } = data;
-            console.log(`- Staging route: ${route.name} (${id})`);
-            batch.set(docRef, routeData);
-        });
-
-        console.log("Committing batch to Firestore...");
-        await batch.commit();
-
-        console.log('✅ Database seeding completed successfully!');
-    } catch (error) {
-        console.error('❌ Error seeding database:', error);
-        process.exit(1);
+    // Use Application Default Credentials, specifying only the projectId.
+    // This is a more robust method for authentication in many environments.
+    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    if (!projectId) {
+      throw new Error('NEXT_PUBLIC_FIREBASE_PROJECT_ID is not set in your .env file.');
     }
+
+    if (!getApps().length) {
+        initializeApp({
+            projectId: projectId,
+        });
+    }
+
+    const db = getFirestore();
+    console.log('Firestore initialized.');
+
+    const routesCollection = db.collection('routes');
+    const batch = db.batch();
+
+    console.log('Preparing to seed bus routes...');
+
+    for (const route of busRoutes) {
+      // We remove the 'path' property as it's no longer part of the data model.
+      const { path, ...routeData } = route;
+      const docRef = routesCollection.doc(route.id);
+      batch.set(docRef, routeData);
+      console.log(`- Staging route: ${route.name} (${route.id})`);
+    }
+
+    console.log('Committing batch to Firestore...');
+    await batch.commit();
+
+    console.log('✅ Database seeded successfully!');
+  } catch (error) {
+    console.error('\n❌ Error seeding database:', error.message);
+    if (error.code === 'PERMISSION_DENIED' || error.code === 7) {
+        console.error('\nPlease ensure your Firestore security rules allow write access for the Admin SDK.');
+    } else if (error.codePrefix === 'app' || error.message.includes('credential')) {
+        console.error('\nPlease check your Firebase project configuration and authentication setup.');
+    }
+    process.exit(1);
+  }
 }
 
 seedDatabase();
