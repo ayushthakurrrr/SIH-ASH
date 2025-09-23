@@ -20,6 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useToast } from "@/hooks/use-toast";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 
 type BusLocations = Record<string, { lat: number; lng: number }>;
 type Etas = Record<string, { duration: number, distance: number } | null>;
@@ -196,6 +197,53 @@ const FitBounds: FC<{ points: { lat: number; lng: number }[] }> = ({ points }) =
     }, [map, points]);
 
     return null;
+}
+
+const BusDetailsSheet: FC<{
+    busId: string | null;
+    busRoute: BusRoute | null;
+    onOpenChange: (open: boolean) => void;
+}> = ({ busId, busRoute, onOpenChange }) => {
+    if (!busId || !busRoute) return null;
+
+    return (
+        <Sheet open={!!busId} onOpenChange={onOpenChange}>
+            <SheetContent className="w-full sm:max-w-md">
+                <SheetHeader>
+                    <SheetTitle className="flex items-center gap-3 text-2xl">
+                        <Bus className="h-6 w-6 text-primary" />
+                        {busId}
+                    </SheetTitle>
+                    <SheetDescription>
+                        Currently running on <span className="font-semibold text-foreground">{busRoute.name}</span>.
+                    </SheetDescription>
+                </SheetHeader>
+                <div className="py-4">
+                    <h4 className="mb-4 text-lg font-medium">Stops on this Route</h4>
+                    <ScrollArea className="h-[70vh] pr-4">
+                        <div className="space-y-4">
+                            {busRoute.stops.map((stop, index) => (
+                                <div key={stop.name} className="flex items-start gap-4">
+                                    <div className="flex flex-col items-center">
+                                        <div className="w-4 h-4 rounded-full bg-primary/50 flex items-center justify-center mt-1">
+                                            <div className="w-2 h-2 rounded-full bg-primary"></div>
+                                        </div>
+                                        {index < busRoute.stops.length - 1 && (
+                                            <div className="w-px h-12 bg-border my-1"/>
+                                        )}
+                                    </div>
+                                    <div>
+                                        <p className="font-semibold">{stop.name}</p>
+                                        <p className="text-sm text-muted-foreground">Scheduled: {stop.scheduledTime}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </ScrollArea>
+                </div>
+            </SheetContent>
+        </Sheet>
+    )
 }
 
 const Page = () => {
@@ -492,6 +540,11 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
     setSelectedBusId(prevId => prevId === busId ? null : busId);
   }, []);
 
+  const selectedBusRoute = useMemo(() => {
+    if (!selectedBusId) return null;
+    return busRoutes.find(r => r.buses.includes(selectedBusId)) || null;
+  }, [selectedBusId, busRoutes]);
+
 
   useEffect(() => {
     if (!selectedRoute || !isPanelOpen) {
@@ -687,6 +740,12 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
             ) : (
             <MissingApiKey />
             )}
+
+            <BusDetailsSheet 
+                busId={selectedBusId}
+                busRoute={selectedBusRoute}
+                onOpenChange={(open) => { if (!open) setSelectedBusId(null) }}
+            />
         </div>
 
         {selectedRoute && (

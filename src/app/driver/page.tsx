@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { PlayCircle, StopCircle, Bus, MapPin, AlertTriangle, Wifi, Route, Navigation, Flag } from 'lucide-react';
+import { PlayCircle, StopCircle, Bus, MapPin, AlertTriangle, Wifi, Route, Navigation, Flag, List } from 'lucide-react';
 import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { getFirestore, collection, getDocs } from 'firebase/firestore';
 import { app } from '@/lib/firebase';
@@ -20,6 +20,7 @@ import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
 import Polyline from '@/components/Polyline';
 import { useToast } from "@/hooks/use-toast";
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 type RoutePath = { lat: number; lng: number }[];
 
@@ -416,6 +417,34 @@ export default function DriverPage() {
                     <p className="text-xs text-muted-foreground">Scheduled for {nextStop.scheduledTime}</p>
                 </div>
             )}
+            
+            {selectedRoute && !isTracking && (
+                <Card>
+                    <CardHeader className='p-4'>
+                        <CardTitle className='text-lg flex items-center gap-2'>
+                            <List className='h-5 w-5' />
+                            Station List
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className='p-0'>
+                        <ScrollArea className='h-48 px-4'>
+                           <div className="space-y-4">
+                                {selectedRoute.stops.map((stop, index) => (
+                                    <div key={stop.name} className="flex items-center gap-3">
+                                        <div className="flex-shrink-0 bg-primary/20 text-primary font-bold rounded-full h-8 w-8 flex items-center justify-center text-sm">
+                                            {index + 1}
+                                        </div>
+                                        <div>
+                                            <p className="font-medium">{stop.name}</p>
+                                            <p className="text-xs text-muted-foreground">Scheduled: {stop.scheduledTime}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                           </div>
+                        </ScrollArea>
+                    </CardContent>
+                </Card>
+            )}
 
 
               {error && (
@@ -466,5 +495,3 @@ export default function DriverPage() {
     </main>
   );
 }
-
-    
