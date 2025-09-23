@@ -6,6 +6,8 @@ export type BusRoute = {
     path: { lat: number; lng: number }[];
 };
 
+// This data is now seeded into Firestore and fetched from there.
+// This file is kept for type definitions and for the seeding script.
 export const busRoutes: BusRoute[] = [
     {
         id: 'route-1',

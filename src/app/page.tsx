@@ -8,7 +8,9 @@ import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { busRoutes } from '@/lib/bus-routes';
+import type { BusRoute } from '@/lib/bus-routes';
+import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { app } from '@/lib/firebase';
 import Polyline from '@/components/Polyline';
 import { getEta } from '@/ai/flows/get-eta-flow';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -20,6 +22,7 @@ type BusLocations = Record<string, { lat: number; lng: number }>;
 type Etas = Record<string, { duration: number, distance: number } | null>;
 
 const Header: FC<{
+  busRoutes: BusRoute[];
   selectedRouteId: string | null;
   source: string | null;
   destination: string | null;
@@ -28,12 +31,12 @@ const Header: FC<{
   onDestinationSelect: (stop: string) => void;
   onClear: () => void;
   busCount: number;
-}> = ({ selectedRouteId, source, destination, onRouteSelect, onSourceSelect, onDestinationSelect, onClear, busCount }) => {
+}> = ({ busRoutes, selectedRouteId, source, destination, onRouteSelect, onSourceSelect, onDestinationSelect, onClear, busCount }) => {
   const selectedRouteStops = useMemo(() => {
     if (!selectedRouteId) return [];
     const route = busRoutes.find(r => r.id === selectedRouteId);
     return route ? route.stops.map(s => s.name) : [];
-  }, [selectedRouteId]);
+  }, [selectedRouteId, busRoutes]);
 
   return (
     <header className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-card border-b shadow-sm z-10 shrink-0">
@@ -185,8 +188,46 @@ const FitBounds: FC<{ points: { lat: number; lng: number }[] }> = ({ points }) =
     return null;
 }
 
-export default function UserMapPage() {
+const Page = () => {
+    const [busRoutes, setBusRoutes] = useState<BusRoute[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchRoutes = async () => {
+            try {
+                const db = getFirestore(app);
+                const routesCollection = collection(db, 'routes');
+                const routesSnapshot = await getDocs(routesCollection);
+                const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BusRoute));
+                setBusRoutes(routesList);
+            } catch (error) {
+                console.error("Error fetching routes from Firestore:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchRoutes();
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="flex h-screen w-screen items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <Bus className="h-12 w-12 animate-pulse text-primary" />
+                    <p className="text-muted-foreground">Loading Routes...</p>
+                </div>
+            </div>
+        )
+    }
+
+    return <UserMapPage busRoutes={busRoutes} />;
+}
+
+
+const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const { toast } = useToast();
   const [allBuses, setAllBuses] = useState<BusLocations>({});
   const [sourceStop, setSourceStop] = useState<string | null>(null);
   const [destinationStop, setDestinationStop] = useState<string | null>(null);
@@ -242,11 +283,11 @@ export default function UserMapPage() {
     } else {
         setShowFullPath(true);
     }
-  }, [sourceStop, destinationStop, selectedRouteId]);
+  }, [sourceStop, destinationStop, selectedRouteId, busRoutes]);
 
   const selectedRoute = useMemo(() => 
     selectedRouteId ? busRoutes.find(r => r.id === selectedRouteId) : null,
-  [selectedRouteId]);
+  [selectedRouteId, busRoutes]);
   
   const visibleBuses = useMemo(() => {
     if (!selectedRoute) {
@@ -325,11 +366,7 @@ export default function UserMapPage() {
           let closestBus: {id: string, location: {lat: number, lng: number}, distance: number} | null = null;
           
           for (const busId in visibleBuses) {
-              // Only consider buses that are "behind" the stop in the route order
               const busLocation = visibleBuses[busId];
-              // This is a simplified check. A more robust solution would check if the bus
-              // has already passed the stop based on route progression.
-              // For now, we'll get ETA from the nearest bus.
               const distance = haversineDistance(busLocation, stop.position);
               if (!closestBus || distance < closestBus.distance) {
                   closestBus = { id: busId, location: busLocation, distance };
@@ -418,6 +455,7 @@ export default function UserMapPage() {
   return (
     <div className="flex flex-col h-screen bg-background">
       <Header 
+        busRoutes={busRoutes}
         selectedRouteId={selectedRouteId}
         source={sourceStop}
         destination={destinationStop}
@@ -540,3 +578,5 @@ export default function UserMapPage() {
     </div>
   );
 }
+
+export default Page;
