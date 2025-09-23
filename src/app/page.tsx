@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, type FC } from 'react';
-import { APIProvider, Map } from '@vis.gl/react-google-maps';
+import { APIProvider, Map, Polyline } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
 import { Bus, WifiOff, Route } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
@@ -102,7 +102,8 @@ export default function UserMapPage() {
     }
     return visibleBuses;
   }
-  
+
+  const selectedRoute = selectedRouteId !== 'all' ? busRoutes.find(r => r.id === selectedRouteId) : null;
   const visibleBuses = getVisibleBuses();
 
   return (
@@ -125,6 +126,14 @@ export default function UserMapPage() {
               {Object.entries(visibleBuses).map(([id, pos]) => (
                 <BusMarker key={id} position={pos} busId={id} />
               ))}
+              {selectedRoute && (
+                <Polyline
+                    path={selectedRoute.path}
+                    strokeColor="hsl(var(--primary))"
+                    strokeOpacity={0.8}
+                    strokeWeight={6}
+                />
+              )}
             </Map>
           </APIProvider>
         ) : (
