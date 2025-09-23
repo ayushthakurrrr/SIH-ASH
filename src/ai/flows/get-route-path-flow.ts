@@ -3,27 +3,10 @@
  * @fileoverview A flow for fetching a road-snapped route path from the Google Maps Directions API.
  *
  * - getRoutePath - A function that calculates the path.
- * - GetRoutePathInput - The input type for the getRoutePath function.
- * - GetRoutePathOutput - The return type for the getRoutePath function.
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'zod';
-
-const LocationSchema = z.object({
-  lat: z.number().describe('The latitude.'),
-  lng: z.number().describe('The longitude.'),
-});
-
-export const GetRoutePathInputSchema = z.object({
-  stops: z.array(LocationSchema).describe('An array of stops, each with lat and lng.'),
-});
-export type GetRoutePathInput = z.infer<typeof GetRoutePathInputSchema>;
-
-export const GetRoutePathOutputSchema = z.object({
-  path: z.array(LocationSchema).describe('An array of points that form the polyline for the route.'),
-});
-export type GetRoutePathOutput = z.infer<typeof GetRoutePathOutputSchema>;
+import { GetRoutePathInputSchema, GetRoutePathOutputSchema, type GetRoutePathInput, type GetRoutePathOutput } from '@/ai/schemas';
 
 // Helper function to decode polyline, based on Google's documentation.
 function decodePolyline(encoded: string): { lat: number; lng: number }[] {

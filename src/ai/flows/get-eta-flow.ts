@@ -6,29 +6,12 @@
  * the travel time and distance between an origin and a destination.
  *
  * - getEta - A function that calculates the ETA.
- * - GetEtaInput - The input type for the getEta function.
- * - GetEtaOutput - The return type for the getEta function.
  */
 
 import { ai } from '@/ai/genkit';
+import { GetEtaInputSchema, GetEtaOutputSchema, type GetEtaInput, type GetEtaOutput } from '@/ai/schemas';
 import { z } from 'zod';
 
-const LocationSchema = z.object({
-  lat: z.number().describe('The latitude.'),
-  lng: z.number().describe('The longitude.'),
-});
-
-export const GetEtaInputSchema = z.object({
-  origin: LocationSchema,
-  destination: LocationSchema,
-});
-export type GetEtaInput = z.infer<typeof GetEtaInputSchema>;
-
-export const GetEtaOutputSchema = z.object({
-  duration: z.number().describe('The travel time in seconds.'),
-  distance: z.number().describe('The travel distance in meters.'),
-});
-export type GetEtaOutput = z.infer<typeof GetEtaOutputSchema>;
 
 const getDirectionsTool = ai.defineTool(
   {
