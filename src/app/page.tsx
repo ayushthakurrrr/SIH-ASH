@@ -319,7 +319,7 @@ export default function UserMapPage() {
                                                 <div className="w-px h-8 bg-border border-dashed"/>
                                             )}
                                         </div>
-                                        <EtaDisplay stopName={stop.name} eta={isEtaLoading && Object.keys(etas).length === 0 ? undefined : etas[stop.name]} />
+                                        <EtaDisplay stopName={stop.name} eta={isEtaLoading ? undefined : etas[stop.name]} />
                                     </div>
                                 </div>
                             ))}
