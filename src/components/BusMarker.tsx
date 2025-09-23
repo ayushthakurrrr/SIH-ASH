@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { FC } from 'react';
@@ -8,16 +9,24 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 interface BusMarkerProps {
   position: { lat: number; lng: number };
   busId: string;
+  onClick?: (e: any) => void;
+  color?: string;
+  isSelected?: boolean;
 }
 
-const BusMarker: FC<BusMarkerProps> = ({ position, busId }) => {
+const BusMarker: FC<BusMarkerProps> = ({ position, busId, onClick, color = 'hsl(var(--accent))', isSelected }) => {
+  const ringClass = isSelected ? 'ring-4 ring-offset-2 ring-blue-500' : 'ring-4 ring-white/50 dark:ring-black/50';
+
   return (
-    <AdvancedMarker position={position}>
+    <AdvancedMarker position={position} onClick={onClick}>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger>
-            <div className="w-10 h-10 bg-accent rounded-full flex items-center justify-center cursor-pointer shadow-lg ring-4 ring-white/50 dark:ring-black/50 transition-transform duration-300 hover:scale-110">
-              <Bus className="h-6 w-6 text-accent-foreground" />
+            <div 
+              className={`w-10 h-10 rounded-full flex items-center justify-center cursor-pointer shadow-lg transition-all duration-300 hover:scale-110 ${ringClass}`}
+              style={{ backgroundColor: color }}
+            >
+              <Bus className="h-6 w-6 text-white" />
             </div>
           </TooltipTrigger>
           <TooltipContent>
@@ -30,3 +39,5 @@ const BusMarker: FC<BusMarkerProps> = ({ position, busId }) => {
 };
 
 export default BusMarker;
+
+    

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, type FC, useCallback } from 'react';
@@ -248,6 +249,25 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   const [routePath, setRoutePath] = useState<RoutePath | null>(null);
   const [isPathLoading, setIsPathLoading] = useState(false);
   const socketRef = React.useRef<Socket | null>(null);
+  const [selectedBusId, setSelectedBusId] = useState<string | null>(null);
+  const [busNavPath, setBusNavPath] = useState<RoutePath | null>(null);
+
+  // Define a color palette for the buses
+  const busColors = useMemo(() => [
+    '#DB4437', '#4285F4', '#F4B400', '#0F9D58',
+    '#9C27B0', '#E91E63', '#673AB7', '#3F51B5',
+    '#00BCD4', '#009688', '#4CAF50', '#8BC34A',
+    '#FFC107', '#FF9800', '#795548', '#607D8B'
+  ], []);
+
+  const busColorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    const buses = Object.keys(allBuses);
+    buses.forEach((busId, index) => {
+        map[busId] = busColors[index % busColors.length];
+    });
+    return map;
+  }, [allBuses, busColors]);
   
   useEffect(() => {
     const newSocket = io();
@@ -319,6 +339,79 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
     fetchPath();
   }, [selectedRoute, toast]);
 
+    const haversineDistance = (coords1: {lat: number, lng: number}, coords2: {lat: number, lng: number}) => {
+        const toRad = (x: number) => x * Math.PI / 180;
+        const R = 6371; // km
+        const dLat = toRad(coords2.lat - coords1.lat);
+        const dLon = toRad(coords2.lng - coords1.lng);
+        const lat1 = toRad(coords1.lat);
+        const lat2 = toRad(coords2.lat);
+
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c * 1000; // meters
+    }
+  
+    // Effect to fetch navigation path for the selected bus
+    useEffect(() => {
+        if (!selectedBusId || !allBuses[selectedBusId]) {
+            setBusNavPath(null);
+            return;
+        }
+
+        const busLocation = allBuses[selectedBusId];
+        const busRoute = busRoutes.find(r => r.buses.includes(selectedBusId));
+        if (!busRoute) {
+            setBusNavPath(null);
+            return;
+        }
+
+        // Find the next stop for the bus
+        let closestStopIndex = -1;
+        let minDistance = Infinity;
+        busRoute.stops.forEach((stop, index) => {
+            const distance = haversineDistance(busLocation, stop.position);
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestStopIndex = index;
+            }
+        });
+
+        // This is a simplified logic. A real app needs to know bus direction.
+        // Assuming the next stop is the one after the physically closest one if it's very near,
+        // or the closest one itself if it's further away.
+        let nextStopIndex = closestStopIndex;
+        if (minDistance < 100 && closestStopIndex < busRoute.stops.length - 1) { // 100m threshold
+            nextStopIndex = closestStopIndex + 1;
+        }
+        
+        const nextStop = busRoute.stops[nextStopIndex];
+        if (!nextStop) {
+            setBusNavPath(null);
+            return;
+        }
+
+        const fetchNavPath = async () => {
+            try {
+                const { path } = await getEta({
+                    origin: busLocation,
+                    destination: nextStop.position,
+                });
+                if(path) {
+                    setBusNavPath(path);
+                }
+            } catch (error) {
+                console.error("Error fetching bus nav path:", error);
+                setBusNavPath(null);
+            }
+        };
+
+        fetchNavPath();
+
+    }, [selectedBusId, allBuses, busRoutes]);
+
+
   useEffect(() => {
     if (selectedRouteId) {
       setIsPanelOpen(true);
@@ -367,6 +460,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
     }
     setSourceStop(null);
     setDestinationStop(null);
+    setSelectedBusId(null);
   }, []);
   
   const handleSourceSelect = useCallback((stop: string) => {
@@ -383,6 +477,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
     setSelectedRouteId(null);
     setIsPanelOpen(false);
     setRoutePath(null);
+    setSelectedBusId(null);
   }, []);
   
   const handleRefresh = useCallback(() => {
@@ -391,7 +486,12 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         title: "Buses Refreshed",
         description: "The bus locations have been updated.",
     });
+  }, [toast]);
+  
+  const handleBusClick = useCallback((busId: string) => {
+    setSelectedBusId(prevId => prevId === busId ? null : busId);
   }, []);
+
 
   useEffect(() => {
     if (!selectedRoute || !isPanelOpen) {
@@ -412,21 +512,6 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         
       setIsEtaLoading(true);
       const newEtas: Etas = {};
-
-      // Use Haversine distance for a simple radial search to find nearest bus
-      const haversineDistance = (coords1: {lat: number, lng: number}, coords2: {lat: number, lng: number}) => {
-          const toRad = (x: number) => x * Math.PI / 180;
-          const R = 6371; // km
-          const dLat = toRad(coords2.lat - coords1.lat);
-          const dLon = toRad(coords2.lng - coords1.lng);
-          const lat1 = toRad(coords1.lat);
-          const lat2 = toRad(coords2.lat);
-
-          const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          return R * c * 1000; // meters
-      }
 
       for (const stop of selectedRoute.stops) {
           let closestBus: {id: string, location: {lat: number, lng: number}, distance: number} | null = null;
@@ -547,17 +632,25 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
             {apiKey ? (
             <APIProvider apiKey={apiKey}>
                 <Map
-                defaultCenter={mapCenter}
-                defaultZoom={12}
-                gestureHandling={'greedy'}
-                disableDefaultUI={true}
-                mapId="livetrack-map"
+                    defaultCenter={mapCenter}
+                    defaultZoom={12}
+                    gestureHandling={'greedy'}
+                    disableDefaultUI={true}
+                    mapId="livetrack-map"
+                    onClick={() => setSelectedBusId(null)}
                 >
                 {Object.entries(visibleBuses).map(([id, pos]) => (
-                    <BusMarker key={id} position={pos} busId={id} />
+                    <BusMarker
+                        key={id}
+                        position={pos}
+                        busId={id}
+                        onClick={(e:any) => { e.stopPropagation(); handleBusClick(id); }}
+                        color={busColorMap[id] || busColors[0]}
+                        isSelected={selectedBusId === id}
+                    />
                 ))}
                 
-                {allRoutePoints.length > 0 && <FitBounds points={allRoutePoints} />}
+                {allRoutePoints.length > 0 && !selectedBusId && <FitBounds points={allRoutePoints} />}
 
                 {isPathLoading && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-card p-2 rounded-md shadow-lg text-sm font-medium">
@@ -575,6 +668,10 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
 
                 {selectedRoute && showFullPath && routePath && (
                      <Polyline path={routePath} strokeColor="darkgreen" strokeOpacity={0.7} strokeWeight={6} />
+                )}
+
+                {busNavPath && (
+                    <Polyline path={busNavPath} strokeColor="#4285F4" strokeOpacity={0.9} strokeWeight={8} />
                 )}
 
                 {selectedRoute?.stops.map((stop, index) => (
@@ -653,3 +750,6 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
 }
 
 export default Page;
+
+
+    
