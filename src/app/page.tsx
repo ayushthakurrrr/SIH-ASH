@@ -62,41 +62,29 @@ const MissingApiKey: FC = () => (
 );
 
 const EtaDisplay: FC<{stopName: string, eta: {duration: number, distance: number} | null | undefined}> = ({stopName, eta}) => {
-    if (eta === undefined) {
-        return (
-            <div className="flex flex-col items-start gap-1 w-full">
-                <span className="font-semibold">{stopName}</span>
-                <div className="flex items-center justify-between w-full">
-                    <Skeleton className="h-5 w-2/3" />
-                    <Skeleton className="h-5 w-1/4" />
-                </div>
-            </div>
-        )
-    }
-
-    if (eta === null) {
-        return (
-            <div className="flex flex-col items-start gap-1 w-full">
-                <span className="font-semibold">{stopName}</span>
-                <span className="text-sm text-muted-foreground">No bus nearby</span>
-            </div>
-        )
-    }
-
-    const minutes = Math.round(eta.duration / 60);
-
     return (
         <div className="flex flex-col items-start gap-1 w-full">
             <span className="font-semibold">{stopName}</span>
-            <div className="flex items-center justify-between text-sm w-full">
-                <div className="flex items-center gap-2 text-primary font-semibold">
-                    <Clock className="h-4 w-4"/>
-                    <span>~ {minutes} min</span>
+            {eta === undefined && ( // Loading state
+                 <div className="flex items-center justify-between w-full">
+                    <Skeleton className="h-5 w-2/3" />
+                    <Skeleton className="h-5 w-1/4" />
                 </div>
-                 <span className="text-xs text-muted-foreground">{ (eta.distance / 1000).toFixed(1)} km</span>
-            </div>
+            )}
+            {eta === null && ( // No bus nearby
+                <span className="text-sm text-muted-foreground">No bus nearby</span>
+            )}
+            {eta && ( // ETA available
+                <div className="flex items-center justify-between text-sm w-full">
+                    <div className="flex items-center gap-2 text-primary font-semibold">
+                        <Clock className="h-4 w-4"/>
+                        <span>~ {Math.round(eta.duration / 60)} min</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{ (eta.distance / 1000).toFixed(1)} km</span>
+                </div>
+            )}
         </div>
-    )
+    );
 }
 
 const FitBounds: FC<{ points: { lat: number; lng: number }[] }> = ({ points }) => {
@@ -176,7 +164,7 @@ export default function UserMapPage() {
   const handleRouteSelect = useCallback((routeId: string) => {
     setSelectedRouteId(routeId);
     setEtas({});
-    if(routeId === 'all') {
+    if(routeId === 'all' || !routeId) {
         setIsPanelOpen(false);
     } else {
         setIsPanelOpen(true);
@@ -241,8 +229,9 @@ export default function UserMapPage() {
 
   const allRoutePoints = useMemo(() => {
     if (!selectedRoute) return [];
-    return [...selectedRoute.path, ...selectedRoute.stops.map(s => s.position)];
-  }, [selectedRoute]);
+    const busPoints = Object.values(visibleBuses);
+    return [...busPoints, ...selectedRoute.path, ...selectedRoute.stops.map(s => s.position)];
+  }, [selectedRoute, visibleBuses]);
 
 
   return (
