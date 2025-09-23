@@ -241,8 +241,9 @@ export default function DriverPage() {
       watchId.current = null;
     }
     setIsTracking(false);
-    setLocation(null); 
+    setLocation(null);
     setStatus(socket.current?.connected ? 'Connected' : 'Disconnected');
+    window.location.reload();
   };
 
   const handleToggleTracking = () => {
