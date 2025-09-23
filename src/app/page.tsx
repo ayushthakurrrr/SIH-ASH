@@ -3,18 +3,18 @@
 import { useState, useEffect, useMemo, type FC, useCallback } from 'react';
 import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
-import { Bus, WifiOff, Route, Clock, PersonStanding, X, GripHorizontal, View } from 'lucide-react';
+import { Bus, WifiOff, Route, Clock, PersonStanding, X, GripHorizontal, View, ChevronDown, ChevronUp } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { busRoutes } from '@/lib/bus-routes';
 import Polyline from '@/components/Polyline';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { getEta } from '@/ai/flows/get-eta-flow';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 
 type BusLocations = Record<string, { lat: number; lng: number }>;
 type Etas = Record<string, { duration: number, distance: number } | null>;
@@ -24,7 +24,7 @@ const Header: FC<{
   onRouteSelect: (routeId: string) => void;
   busCount: number;
 }> = ({ selectedRoute, onRouteSelect, busCount }) => (
-  <header className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-card border-b shadow-sm z-10">
+  <header className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-card border-b shadow-sm z-10 shrink-0">
     <div className="flex items-center gap-3">
       <Bus size={32} className="text-primary" />
       <h1 className="text-2xl font-bold text-foreground">LiveTrack</h1>
@@ -207,6 +207,21 @@ export default function UserMapPage() {
         for (const stop of selectedRoute.stops) {
             let closestBus: {id: string, location: {lat: number, lng: number}, distance: number} | null = null;
             
+            // A simple distance calculation, you might want to replace with Google Maps API for real road distance
+            const haversineDistance = (coords1: {lat: number, lng: number}, coords2: {lat: number, lng: number}) => {
+                const toRad = (x: number) => x * Math.PI / 180;
+                const R = 6371; // km
+                const dLat = toRad(coords2.lat - coords1.lat);
+                const dLon = toRad(coords2.lng - coords1.lng);
+                const lat1 = toRad(coords1.lat);
+                const lat2 = toRad(coords2.lat);
+
+                const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                return R * c * 1000; // meters
+            }
+            
             for (const busId in visibleBuses) {
                 const distance = haversineDistance(visibleBuses[busId], stop.position);
                 if (!closestBus || distance < closestBus.distance) {
@@ -255,8 +270,8 @@ export default function UserMapPage() {
         onRouteSelect={handleRouteSelect}
         busCount={Object.keys(visibleBuses).length}
       />
-      <main className="flex-grow flex relative overflow-hidden">
-        <div className='flex-grow h-full'>
+      <main className="flex-grow flex flex-col overflow-hidden">
+        <div className="flex-grow h-full relative">
             {apiKey ? (
             <APIProvider apiKey={apiKey}>
                 <Map
@@ -290,59 +305,48 @@ export default function UserMapPage() {
             )}
         </div>
 
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
-            <Button 
-                onClick={() => setIsPanelOpen(true)}
-                disabled={!selectedRoute}
-                className="transition-all duration-300"
-                size="lg"
-            >
-                <View className="mr-2" /> View Stops
-            </Button>
-        </div>
-
-
-        <Sheet open={isPanelOpen && !!selectedRoute} onOpenChange={setIsPanelOpen}>
-            <SheetContent 
-                side="bottom" 
-                className="h-[50vh] p-0 flex flex-col"
-                hideCloseButton={true}
-                hideOverlay={true}
-            >
-                {selectedRoute && (
-                    <>
-                    <SheetHeader className="p-4 pb-2 text-center cursor-grab active:cursor-grabbing">
-                        <div className="mx-auto">
-                            <GripHorizontal className="h-6 w-6 text-muted-foreground" />
+        {selectedRoute && (
+            <div className="shrink-0 border-t bg-card">
+                <button 
+                    onClick={() => setIsPanelOpen(!isPanelOpen)}
+                    className="w-full p-2 flex items-center justify-center text-sm font-medium text-muted-foreground hover:bg-muted"
+                >
+                    {isPanelOpen ? (
+                        <>
+                            <ChevronDown className="mr-2" /> Hide Stops
+                        </>
+                    ) : (
+                        <>
+                            <ChevronUp className="mr-2" /> View Stops
+                        </>
+                    )}
+                </button>
+                {isPanelOpen && (
+                    <div className="h-[40vh] flex flex-col">
+                        <div className="p-4 pb-2 text-left">
+                            <h2 className="text-2xl font-bold">{selectedRoute.name}</h2>
                         </div>
-                         <div className="flex items-center justify-between">
-                            <SheetTitle className="text-2xl">{selectedRoute.name}</SheetTitle>
-                            <button onClick={() => setIsPanelOpen(false)} className="p-1 rounded-md hover:bg-muted">
-                               <X className="h-5 w-5" />
-                            </button>
-                        </div>
-                    </SheetHeader>
-                    <ScrollArea className="flex-grow">
-                        <div className="p-6 pt-0 space-y-6">
-                            {selectedRoute.stops.map((stop, index) => (
-                                <div key={stop.name} className="space-y-3">
-                                    <div className="flex items-center gap-4">
-                                        <div className="flex flex-col items-center">
-                                            <PersonStanding className="h-6 w-6 text-primary" />
-                                            {index < selectedRoute.stops.length - 1 && (
-                                                <div className="w-px h-8 bg-border border-dashed"/>
-                                            )}
+                        <ScrollArea className="flex-grow">
+                            <div className="p-6 pt-0 space-y-6">
+                                {selectedRoute.stops.map((stop, index) => (
+                                    <div key={stop.name} className="space-y-3">
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex flex-col items-center">
+                                                <PersonStanding className="h-6 w-6 text-primary" />
+                                                {index < selectedRoute.stops.length - 1 && (
+                                                    <div className="w-px h-8 bg-border border-dashed"/>
+                                                )}
+                                            </div>
+                                            <EtaDisplay stopName={stop.name} eta={isEtaLoading ? undefined : etas[stop.name]} />
                                         </div>
-                                        <EtaDisplay stopName={stop.name} eta={isEtaLoading ? undefined : etas[stop.name]} />
                                     </div>
-                                </div>
-                            ))}
-                        </div>
-                    </ScrollArea>
-                    </>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                    </div>
                 )}
-            </SheetContent>
-        </Sheet>
+            </div>
+        )}
       </main>
     </div>
   );
