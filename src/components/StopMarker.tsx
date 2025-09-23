@@ -1,27 +1,18 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
-import { createRoot } from 'react-dom/client';
-import { useMap } from '@vis.gl/react-google-maps';
+import type { FC } from 'react';
+import { AdvancedMarker } from '@vis.gl/react-google-maps';
 import { MapPin } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface StopMarkerProps {
-  position: google.maps.LatLngLiteral;
+  position: { lat: number; lng: number };
   stopName: string;
 }
 
-const StopMarker: React.FC<StopMarkerProps> = ({ position, stopName }) => {
-  const map = useMap();
-  const [marker, setMarker] = useState<google.maps.marker.AdvancedMarkerElement | null>(null);
-
-  useEffect(() => {
-    if (!map) return;
-
-    const markerElement = document.createElement('div');
-    const root = createRoot(markerElement);
-    
-    root.render(
+const StopMarker: FC<StopMarkerProps> = ({ position, stopName }) => {
+  return (
+    <AdvancedMarker position={position} title={stopName}>
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger>
@@ -34,30 +25,8 @@ const StopMarker: React.FC<StopMarkerProps> = ({ position, stopName }) => {
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
-    );
-
-    const newMarker = new google.maps.marker.AdvancedMarkerElement({
-        map,
-        position,
-        content: markerElement,
-        title: stopName
-    });
-
-    setMarker(newMarker);
-
-    return () => {
-      newMarker.map = null;
-      root.unmount();
-    };
-  }, [map, position, stopName]);
-
-  useEffect(() => {
-    if (marker) {
-      marker.position = position;
-    }
-  }, [marker, position]);
-
-  return null;
+    </AdvancedMarker>
+  );
 };
 
 export default StopMarker;
