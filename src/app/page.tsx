@@ -644,7 +644,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                         key={id}
                         position={pos}
                         busId={id}
-                        onClick={(e:any) => { e.stopPropagation(); handleBusClick(id); }}
+                        onClick={() => handleBusClick(id)}
                         color={busColorMap[id] || busColors[0]}
                         isSelected={selectedBusId === id}
                     />
