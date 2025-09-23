@@ -25,7 +25,7 @@ const Header: FC<{
         <div className="flex items-center gap-2 text-sm text-muted-foreground ml-auto">
             <span>{busCount} {busCount === 1 ? 'Bus' : 'Buses'} Online</span>
         </div>
-        <Select onValueChange={(value) => onRouteSelect(value)} defaultValue={selectedRoute || undefined}>
+        <Select onValueChange={(value) => onRouteSelect(value)} value={selectedRoute || undefined}>
             <SelectTrigger className="w-full md:w-[280px]">
                 <Route className="h-4 w-4 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Select a Bus Route" />
