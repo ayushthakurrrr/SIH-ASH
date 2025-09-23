@@ -10,7 +10,7 @@
     "start": "NODE_ENV=production tsx server.ts",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "db:seed": "node --loader tsx scripts/seed.mjs"
+    "db:seed": "tsx scripts/seed.mjs"
   },
   "dependencies": {
     "@genkit-ai/googleai": "^1.14.1",
