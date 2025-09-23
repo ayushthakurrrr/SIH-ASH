@@ -13,6 +13,7 @@ import Polyline from '@/components/Polyline';
 import { getEta } from '@/ai/flows/get-eta-flow';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 
 type BusLocations = Record<string, { lat: number; lng: number }>;
 type Etas = Record<string, { duration: number, distance: number } | null>;
@@ -168,6 +169,7 @@ export default function UserMapPage() {
   const [etas, setEtas] = useState<Etas>({});
   const [isEtaLoading, setIsEtaLoading] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [showFullPath, setShowFullPath] = useState(false);
   
   useEffect(() => {
     const newSocket = io();
@@ -209,6 +211,7 @@ export default function UserMapPage() {
       if (foundRoute) {
         setSelectedRouteId(foundRoute.id);
         setIsPanelOpen(true);
+        setShowFullPath(false); // Reset to default view when new route is selected
       } else {
         setSelectedRouteId(null);
         setIsPanelOpen(false);
@@ -332,8 +335,8 @@ export default function UserMapPage() {
 
   }, [selectedRoute, visibleBuses, isPanelOpen]);
 
-  const { pathSegments, allRoutePoints } = useMemo(() => {
-    if (!selectedRoute) return { pathSegments: null, allRoutePoints: [] };
+  const { pathSegments, allRoutePoints, journeyStops } = useMemo(() => {
+    if (!selectedRoute) return { pathSegments: null, allRoutePoints: [], journeyStops: [] };
   
     const sourceIndex = selectedRoute.stops.findIndex(s => s.name === sourceStop);
     const destIndex = selectedRoute.stops.findIndex(s => s.name === destinationStop);
@@ -343,14 +346,19 @@ export default function UserMapPage() {
     
     const allPoints = [...busPoints, ...stopPoints];
 
+    const stopsToDisplay =
+      showFullPath || sourceIndex === -1 || destIndex === -1
+        ? selectedRoute.stops
+        : selectedRoute.stops.slice(sourceIndex, destIndex + 1);
+
     if (sourceIndex === -1 || destIndex === -1) {
       return {
         pathSegments: { before: selectedRoute.path, between: [], after: [] },
         allRoutePoints: allPoints,
+        journeyStops: stopsToDisplay
       };
     }
     
-    // A simple way to find a point on the path, this might need to be more robust
     const findClosestPathIndex = (pos: {lat: number, lng: number}) => {
         let closestIndex = -1;
         let minDistance = Infinity;
@@ -375,8 +383,9 @@ export default function UserMapPage() {
     return {
       pathSegments: { before: pathBefore, between: pathBetween, after: pathAfter },
       allRoutePoints: allPoints,
+      journeyStops: stopsToDisplay,
     };
-  }, [selectedRoute, sourceStop, destinationStop, visibleBuses]);
+  }, [selectedRoute, sourceStop, destinationStop, visibleBuses, showFullPath]);
 
 
   return (
@@ -469,17 +478,24 @@ export default function UserMapPage() {
                 </button>
                 {isPanelOpen && (
                     <div className="h-[40vh] flex flex-col">
-                        <div className="p-4 pb-2 text-left">
+                        <div className="p-4 pb-2 flex justify-between items-center">
                             <h2 className="text-2xl font-bold">{selectedRoute.name}</h2>
+                             <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowFullPath(!showFullPath)}
+                             >
+                                {showFullPath ? 'Show Journey' : 'Show Full Path'}
+                             </Button>
                         </div>
                         <ScrollArea className="flex-grow">
                             <div className="p-6 pt-0 space-y-6">
-                                {selectedRoute.stops.map((stop, index) => (
+                                {journeyStops.map((stop, index) => (
                                     <div key={stop.name} className="space-y-3">
                                         <div className="flex items-center gap-4">
                                             <div className="flex flex-col items-center">
                                                 <PersonStanding className="h-6 w-6 text-primary" />
-                                                {index < selectedRoute.stops.length - 1 && (
+                                                {index < journeyStops.length - 1 && (
                                                     <div className="w-px h-12 bg-border border-dashed"/>
                                                 )}
                                             </div>
