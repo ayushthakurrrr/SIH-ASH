@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, type FC } from 'react';
-import { APIProvider, Map, Polyline } from '@vis.gl/react-google-maps';
+import { APIProvider, Map, Polyline, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
-import { Bus, WifiOff, Route } from 'lucide-react';
+import { Bus, WifiOff, Route, MapPin } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
+import StopMarker from '@/components/StopMarker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { busRoutes, type BusRoute } from '@/lib/bus-routes';
 
@@ -127,12 +128,17 @@ export default function UserMapPage() {
                 <BusMarker key={id} position={pos} busId={id} />
               ))}
               {selectedRoute && (
-                <Polyline
-                    path={selectedRoute.path}
-                    strokeColor="hsl(var(--primary))"
-                    strokeOpacity={0.8}
-                    strokeWeight={6}
-                />
+                <>
+                  <Polyline
+                      path={selectedRoute.path}
+                      strokeColor="hsl(var(--primary))"
+                      strokeOpacity={0.8}
+                      strokeWeight={6}
+                  />
+                  {selectedRoute.stops.map((stop, index) => (
+                    <StopMarker key={`stop-${stop.name}`} position={stop.position} stopName={stop.name} />
+                  ))}
+                </>
               )}
             </Map>
           </APIProvider>
