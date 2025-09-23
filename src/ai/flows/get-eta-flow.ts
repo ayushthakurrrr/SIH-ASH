@@ -12,6 +12,37 @@ import { ai } from '@/ai/genkit';
 import { GetEtaInputSchema, GetEtaOutputSchema, type GetEtaInput, type GetEtaOutput } from '@/ai/schemas';
 import { z } from 'zod';
 
+// Helper function to decode polyline, based on Google's documentation.
+function decodePolyline(encoded: string): { lat: number; lng: number }[] {
+    let points: { lat: number; lng: number }[] = [];
+    let index = 0, len = encoded.length;
+    let lat = 0, lng = 0;
+
+    while (index < len) {
+        let b, shift = 0, result = 0;
+        do {
+            b = encoded.charCodeAt(index++) - 63;
+            result |= (b & 0x1f) << shift;
+            shift += 5;
+        } while (b >= 0x20);
+        let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+        lat += dlat;
+
+        shift = 0;
+        result = 0;
+        do {
+            b = encoded.charCodeAt(index++) - 63;
+            result |= (b & 0x1f) << shift;
+            shift += 5;
+        } while (b >= 0x20);
+        let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+        lng += dlng;
+
+        points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+    }
+    return points;
+}
+
 
 const getDirectionsTool = ai.defineTool(
   {
@@ -20,6 +51,9 @@ const getDirectionsTool = ai.defineTool(
     inputSchema: GetEtaInputSchema,
     outputSchema: z.object({
         routes: z.array(z.object({
+            overview_polyline: z.object({
+                points: z.string()
+            }),
             legs: z.array(z.object({
                 duration: z.object({
                     value: z.number()
@@ -60,14 +94,19 @@ const getEtaFlow = ai.defineFlow(
   async (input) => {
     const directions = await getDirectionsTool(input);
 
-    const leg = directions.routes[0]?.legs[0];
-    if (!leg) {
+    const route = directions.routes[0];
+    const leg = route?.legs[0];
+    if (!leg || !route) {
         throw new Error("Could not determine ETA from directions response.");
     }
+    
+    const encodedPolyline = route.overview_polyline.points;
+    const decodedPath = decodePolyline(encodedPolyline);
     
     return {
       duration: leg.duration.value,
       distance: leg.distance.value,
+      path: decodedPath,
     };
   }
 );

@@ -15,6 +15,7 @@ import { app } from '@/lib/firebase';
 import type { BusRoute } from '@/lib/bus-routes';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getRoutePath } from '@/ai/flows/get-route-path-flow';
+import { getEta } from '@/ai/flows/get-eta-flow';
 import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
 import Polyline from '@/components/Polyline';
@@ -60,6 +61,46 @@ const FitBoundsToDriver: FC<{ driverLocation: { lat: number, lng: number } | nul
     return null;
 }
 
+const DriverNavigationLine: FC<{
+    driverLocation: { lat: number; lng: number };
+    nextStopLocation: { lat: number; lng: number };
+}> = ({ driverLocation, nextStopLocation }) => {
+    const [navPath, setNavPath] = useState<RoutePath | null>(null);
+    const { toast } = useToast();
+
+    useEffect(() => {
+        const fetchNavPath = async () => {
+            if (!driverLocation || !nextStopLocation) return;
+            try {
+                const { path } = await getEta({
+                    origin: driverLocation,
+                    destination: nextStopLocation,
+                });
+                if(path) {
+                    setNavPath(path);
+                }
+            } catch (error) {
+                console.error("Error fetching navigation path:", error);
+                toast({
+                    variant: "destructive",
+                    title: "Could not fetch navigation path",
+                    description: "There was an error fetching the live navigation path.",
+                });
+            }
+        };
+
+        fetchNavPath();
+        const intervalId = setInterval(fetchNavPath, 30000); // Refresh path every 30 seconds
+
+        return () => clearInterval(intervalId);
+    }, [driverLocation, nextStopLocation, toast]);
+
+    if (!navPath) return null;
+
+    return <Polyline path={navPath} strokeColor="#4285F4" strokeOpacity={0.8} strokeWeight={8} />;
+};
+
+
 const DriverMap: FC<{
     route: BusRoute;
     driverLocation: { lat: number; lng: number; };
@@ -95,6 +136,8 @@ const DriverMap: FC<{
     if (!apiKey) {
         return <div className="flex items-center justify-center h-full bg-muted text-destructive text-center p-4">Google Maps API Key is missing.</div>
     }
+    
+    const nextStopLocation = route.stops[nextStopIndex]?.position || null;
 
     return (
         <APIProvider apiKey={apiKey}>
@@ -108,7 +151,10 @@ const DriverMap: FC<{
                 {driverLocation && (
                     <>
                         <BusMarker position={driverLocation} busId="Your Location" />
-                        <FitBoundsToDriver driverLocation={driverLocation} nextStopLocation={route.stops[nextStopIndex]?.position || null} />
+                        <FitBoundsToDriver driverLocation={driverLocation} nextStopLocation={nextStopLocation} />
+                        {nextStopLocation && (
+                            <DriverNavigationLine driverLocation={driverLocation} nextStopLocation={nextStopLocation} />
+                        )}
                     </>
                 )}
                 {routePath && (
@@ -260,7 +306,6 @@ export default function DriverPage() {
         intervalId.current = null;
     }
     setIsTracking(false);
-    setLocation(null); // Keep location for a moment, then refresh
     setStatus(socket.current?.connected ? 'Connected' : 'Disconnected');
     window.location.reload();
   };

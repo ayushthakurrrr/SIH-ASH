@@ -19,6 +19,7 @@ export type GetEtaInput = z.infer<typeof GetEtaInputSchema>;
 export const GetEtaOutputSchema = z.object({
   duration: z.number().describe('The travel time in seconds.'),
   distance: z.number().describe('The travel distance in meters.'),
+  path: z.array(LocationSchema).optional().describe('An array of points that form the polyline for the route.'),
 });
 export type GetEtaOutput = z.infer<typeof GetEtaOutputSchema>;
 
