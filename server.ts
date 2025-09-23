@@ -14,6 +14,8 @@ const handler = app.getRequestHandler();
 
 // In-memory storage for bus locations
 const busLocations: Record<string, { lat: number; lng: number }> = {};
+// Map socket IDs to bus IDs
+const socketBusMap: Record<string, string> = {};
 
 app.prepare().then(() => {
   const expressApp = express();
@@ -27,13 +29,18 @@ app.prepare().then(() => {
   });
 
   io.on('connection', (socket) => {
-    console.log('A client connected');
+    console.log(`A client connected: ${socket.id}`);
 
     // Send initial locations to the newly connected client
     socket.emit('initialLocations', busLocations);
 
     socket.on('updateLocation', (data: LocationUpdate) => {
       if(data.busId && data.location) {
+        // Store mapping if it's the first time we see this socket with a busId
+        if (!socketBusMap[socket.id]) {
+            socketBusMap[socket.id] = data.busId;
+        }
+        
         busLocations[data.busId] = data.location;
         // Broadcast to all other clients
         socket.broadcast.emit('locationUpdate', data);
@@ -41,9 +48,17 @@ app.prepare().then(() => {
     });
 
     socket.on('disconnect', () => {
-      console.log('A client disconnected');
-      // Note: For a real-world app, you might want to handle bus disconnection,
-      // e.g., remove it from the map after a timeout.
+      const busId = socketBusMap[socket.id];
+      if (busId) {
+        console.log(`Bus ${busId} disconnected.`);
+        // Remove the bus from our records
+        delete busLocations[busId];
+        delete socketBusMap[socket.id];
+        // Notify all clients that this bus is now offline
+        io.emit('removeBus', busId);
+      } else {
+        console.log(`A client disconnected: ${socket.id}`);
+      }
     });
   });
   

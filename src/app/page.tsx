@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useMemo, type FC, useCallback } from 'react';
@@ -257,6 +258,15 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         ...prevBuses,
         [data.busId]: data.location,
       }));
+    });
+
+    newSocket.on('removeBus', (busId: string) => {
+      console.log(`Bus ${busId} went offline, removing from map.`);
+      setAllBuses((prevBuses) => {
+        const newBuses = { ...prevBuses };
+        delete newBuses[busId];
+        return newBuses;
+      });
     });
 
     newSocket.on('disconnect', () => {
