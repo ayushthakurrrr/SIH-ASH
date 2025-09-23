@@ -317,27 +317,8 @@ export default function UserMapPage() {
       setIsEtaLoading(false);
     }
     
-    // Use dummy data for now
-    const useDummyData = () => {
-        if (!selectedRoute) return;
-        setIsEtaLoading(true);
-        const dummyEtas: Etas = {};
-        selectedRoute.stops.forEach((stop, index) => {
-            dummyEtas[stop.name] = {
-                duration: (index + 1) * 5 * 60, // 5, 10, 15... minutes
-                distance: (index + 1) * 1200, // 1.2, 2.4, 3.6... km
-            };
-        });
-        setTimeout(() => {
-            setEtas(dummyEtas);
-            setIsEtaLoading(false);
-        }, 1000)
-    };
-    
-    // calculateEtas();
-    useDummyData();
-    
-    const intervalId = setInterval(useDummyData, 30000);
+    calculateEtas();
+    const intervalId = setInterval(calculateEtas, 30000);
     return () => clearInterval(intervalId);
 
   }, [selectedRoute, visibleBuses, isPanelOpen]);
