@@ -144,6 +144,12 @@ export default function DriverPage() {
 
   const socket = useRef<Socket | null>(null);
   const watchId = useRef<number | null>(null);
+  const intervalId = useRef<NodeJS.Timeout | null>(null);
+  const locationRef = useRef(location);
+
+  useEffect(() => {
+    locationRef.current = location;
+  }, [location]);
 
   useEffect(() => {
     const fetchRoutes = async () => {
@@ -185,6 +191,9 @@ export default function DriverPage() {
       if (watchId.current) {
         navigator.geolocation.clearWatch(watchId.current);
       }
+      if (intervalId.current) {
+        clearInterval(intervalId.current);
+      }
     };
   }, []);
   
@@ -218,21 +227,27 @@ export default function DriverPage() {
           lng: position.coords.longitude,
         };
         setLocation(newLocation);
-        socket.current?.emit('updateLocation', { busId, location: newLocation });
-        setIsTracking(true);
-        setStatus('Broadcasting Location');
+        // We only set the location here. The interval will send the update.
       },
       (geoError) => {
         setError(`Geolocation error: ${geoError.message}`);
-        setIsTracking(false);
-        setStatus('Location Error');
+        stopTracking();
       },
       {
         enableHighAccuracy: true,
-        timeout: 30000,
+        timeout: 10000,
         maximumAge: 0,
       }
     );
+
+    intervalId.current = setInterval(() => {
+        if (socket.current?.connected && locationRef.current) {
+            socket.current.emit('updateLocation', { busId, location: locationRef.current });
+            setStatus('Broadcasting Location');
+        }
+    }, 30000); // 30 seconds
+
+    setIsTracking(true);
   };
 
   const stopTracking = () => {
@@ -240,8 +255,12 @@ export default function DriverPage() {
       navigator.geolocation.clearWatch(watchId.current);
       watchId.current = null;
     }
+    if (intervalId.current) {
+        clearInterval(intervalId.current);
+        intervalId.current = null;
+    }
     setIsTracking(false);
-    setLocation(null);
+    // setLocation(null); // Keep location for a moment, then refresh
     setStatus(socket.current?.connected ? 'Connected' : 'Disconnected');
     window.location.reload();
   };
