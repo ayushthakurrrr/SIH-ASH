@@ -17,7 +17,7 @@ const StopMarker: FC<StopMarkerProps> = ({ position, stopName }) => {
         <Tooltip>
           <TooltipTrigger>
             <div className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-transform duration-300 hover:scale-110">
-              <MapPin className="h-6 w-6 text-red-500" fill="white" />
+              <MapPin className="h-6 w-6 text-destructive" fill="white" />
             </div>
           </TooltipTrigger>
           <TooltipContent>
