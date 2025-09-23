@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, type FC, useCallback } from 'react';
 import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
-import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin } from 'lucide-react';
+import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin, X } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
@@ -27,8 +27,9 @@ const Header: FC<{
   destination: string | null;
   onSourceSelect: (stop: string) => void;
   onDestinationSelect: (stop: string) => void;
+  onClear: () => void;
   busCount: number;
-}> = ({ source, destination, onSourceSelect, onDestinationSelect, busCount }) => (
+}> = ({ source, destination, onSourceSelect, onDestinationSelect, onClear, busCount }) => (
   <header className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-card border-b shadow-sm z-10 shrink-0">
     <div className="flex items-center gap-3">
       <Bus size={32} className="text-primary" />
@@ -60,6 +61,9 @@ const Header: FC<{
           ))}
         </SelectContent>
       </Select>
+      <Button variant="ghost" size="icon" onClick={onClear} aria-label="Clear selection">
+        <X className="h-4 w-4" />
+      </Button>
     </div>
   </header>
 );
@@ -223,7 +227,7 @@ export default function UserMapPage() {
           variant: "destructive",
         })
       }
-    } else {
+    } else if (!sourceStop && !destinationStop) {
       setSelectedRouteId(null);
       setIsPanelOpen(false);
     }
@@ -252,6 +256,11 @@ export default function UserMapPage() {
 
   const handleDestinationSelect = useCallback((stop: string) => {
     setDestinationStop(stop);
+  }, []);
+  
+  const handleClear = useCallback(() => {
+    setSourceStop(null);
+    setDestinationStop(null);
   }, []);
 
   useEffect(() => {
@@ -332,7 +341,10 @@ export default function UserMapPage() {
     const busPoints = Object.values(visibleBuses);
     const stopPoints = selectedRoute.stops.map(s => s.position);
     
-    const allPoints = [...busPoints, ...stopPoints];
+    const allPoints = (sourceIndex === -1 || destIndex === -1) 
+      ? [...busPoints, ...stopPoints]
+      : [...busPoints, ...selectedRoute.stops.slice(sourceIndex, destIndex + 1).map(s => s.position)];
+
 
     const stopsToDisplay =
       showFullPath || sourceIndex === -1 || destIndex === -1
@@ -383,6 +395,7 @@ export default function UserMapPage() {
         destination={destinationStop}
         onSourceSelect={handleSourceSelect}
         onDestinationSelect={handleDestinationSelect}
+        onClear={handleClear}
         busCount={Object.keys(allBuses).length}
       />
       <main className="flex-grow flex flex-col overflow-hidden">
@@ -401,7 +414,7 @@ export default function UserMapPage() {
                 ))}
                 {selectedRoute && (
                     <>
-                    <FitBounds points={allRoutePoints} />
+                    {allRoutePoints.length > 0 && <FitBounds points={allRoutePoints} />}
                     {pathSegments ? (
                         <>
                             <Polyline
