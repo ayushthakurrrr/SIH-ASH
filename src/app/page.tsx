@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo, type FC, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, type FC, useCallback } from 'react';
 import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
 import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin, X, RefreshCw } from 'lucide-react';
