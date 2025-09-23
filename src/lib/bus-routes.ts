@@ -83,5 +83,73 @@ export const busRoutes: BusRoute[] = [
             { lat: 22.7099, lng: 75.8596 },
             { lat: 22.7122, lng: 75.8611 },
         ]
+    },
+    {
+        id: 'route-3',
+        name: 'Route 3: Airport Express',
+        buses: ['MP-09-5E', 'MP-09-6F'],
+        stops: [
+            { name: 'Sarwate Bus Stand', position: { lat: 22.712, lng: 75.861 }, scheduledTime: '12:00 PM' },
+            { name: 'Railway Station', position: { lat: 22.715, lng: 75.866 }, scheduledTime: '12:05 PM' },
+            { name: 'Collectorate', position: { lat: 22.718, lng: 75.875 }, scheduledTime: '12:15 PM' },
+            { name: 'Devi Ahilya Bai Holkar Airport', position: { lat: 22.723, lng: 75.802 }, scheduledTime: '12:45 PM' },
+        ],
+        path: [
+            { lat: 22.712, lng: 75.861 },
+            { lat: 22.7135, lng: 75.864 },
+            { lat: 22.715, lng: 75.866 },
+            { lat: 22.716, lng: 75.870 },
+            { lat: 22.718, lng: 75.875 },
+            { lat: 22.719, lng: 75.870 },
+            { lat: 22.720, lng: 75.860 },
+            { lat: 22.721, lng: 75.850 },
+            { lat: 22.722, lng: 75.830 },
+            { lat: 22.723, lng: 75.802 },
+        ]
+    },
+    {
+        id: 'route-4',
+        name: 'Route 4: University Link',
+        buses: ['MP-09-7G', 'MP-09-8H'],
+        stops: [
+            { name: 'Bhawarkua Square', position: { lat: 22.688, lng: 75.872 }, scheduledTime: '01:00 PM' },
+            { name: 'Holkar College', position: { lat: 22.700, lng: 75.873 }, scheduledTime: '01:10 PM' },
+            { name: 'DAVV University', position: { lat: 22.721, lng: 75.878 }, scheduledTime: '01:25 PM' },
+            { name: 'Khandwa Naka', position: { lat: 22.670, lng: 75.875 }, scheduledTime: '01:40 PM' },
+        ],
+        path: [
+            { lat: 22.688, lng: 75.872 },
+            { lat: 22.695, lng: 75.8725 },
+            { lat: 22.700, lng: 75.873 },
+            { lat: 22.708, lng: 75.875 },
+            { lat: 22.715, lng: 75.877 },
+            { lat: 22.721, lng: 75.878 },
+            { lat: 22.715, lng: 75.879 },
+            { lat: 22.700, lng: 75.878 },
+            { lat: 22.685, lng: 75.876 },
+            { lat: 22.670, lng: 75.875 },
+        ]
+    },
+    {
+        id: 'route-5',
+        name: 'Route 5: IT Park Shuttle',
+        buses: ['MP-09-9I', 'MP-09-10J'],
+        stops: [
+            { name: 'Vijay Nagar Square', position: { lat: 22.752, lng: 75.894 }, scheduledTime: '02:00 PM' },
+            { name: 'Radisson Square', position: { lat: 22.750, lng: 75.912 }, scheduledTime: '02:10 PM' },
+            { name: 'Crystal IT Park', position: { lat: 22.745, lng: 75.898 }, scheduledTime: '02:25 PM' },
+            { name: 'Bhawarkua Square', position: { lat: 22.688, lng: 75.872 }, scheduledTime: '02:50 PM' },
+        ],
+        path: [
+            { lat: 22.752, lng: 75.894 },
+            { lat: 22.751, lng: 75.905 },
+            { lat: 22.750, lng: 75.912 },
+            { lat: 22.747, lng: 75.905 },
+            { lat: 22.745, lng: 75.898 },
+            { lat: 22.735, lng: 75.890 },
+            { lat: 22.720, lng: 75.885 },
+            { lat: 22.705, lng: 75.880 },
+            { lat: 22.688, lng: 75.872 },
+        ]
     }
 ];
