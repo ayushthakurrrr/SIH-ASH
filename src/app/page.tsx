@@ -88,7 +88,7 @@ export default function UserMapPage() {
     };
   }, []);
   
-  const mapCenter = { lat: 37.7749, lng: -122.4194 }; // San Francisco
+  const mapCenter = { lat: 22.7196, lng: 75.8577 }; // Indore
 
   const getVisibleBuses = () => {
     if (selectedRouteId === 'all') {
@@ -137,8 +137,8 @@ export default function UserMapPage() {
                       strokeOpacity={0.8}
                       strokeWeight={6}
                   />
-                  {selectedRoute.stops.map((stop) => (
-                    <StopMarker key={`stop-${stop.name}`} position={stop.position} stopName={stop.name} />
+                  {selectedRoute.stops.map((stop, index) => (
+                    <StopMarker key={`stop-${index}-${stop.name}`} position={stop.position} stopName={stop.name} />
                   ))}
                 </>
               )}
