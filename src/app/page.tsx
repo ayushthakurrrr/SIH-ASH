@@ -3,7 +3,7 @@
 import { useState, useEffect, type FC } from 'react';
 import { APIProvider, Map } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
-import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronsRight, X } from 'lucide-react';
+import { Bus, WifiOff, Route, Clock, PersonStanding, X } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
@@ -64,25 +64,36 @@ const MissingApiKey: FC = () => (
 const EtaDisplay: FC<{stopName: string, eta: {duration: number, distance: number} | null | undefined}> = ({stopName, eta}) => {
     if (eta === undefined) {
         return (
-            <div className="flex items-center justify-between">
-                <Skeleton className="h-5 w-2/3" />
-                <Skeleton className="h-5 w-1/4" />
+            <div className="flex flex-col items-start gap-1 w-full">
+                <span className="font-semibold">{stopName}</span>
+                <div className="flex items-center justify-between w-full">
+                    <Skeleton className="h-5 w-2/3" />
+                    <Skeleton className="h-5 w-1/4" />
+                </div>
             </div>
         )
     }
 
     if (eta === null) {
-        return <span className="text-sm text-muted-foreground">No bus nearby</span>
+        return (
+            <div className="flex flex-col items-start gap-1 w-full">
+                <span className="font-semibold">{stopName}</span>
+                <span className="text-sm text-muted-foreground">No bus nearby</span>
+            </div>
+        )
     }
 
     const minutes = Math.round(eta.duration / 60);
 
     return (
-        <div className="flex items-center justify-between text-sm">
+        <div className="flex flex-col items-start gap-1 w-full">
             <span className="font-semibold">{stopName}</span>
-            <div className="flex items-center gap-2 text-primary font-semibold">
-                <Clock className="h-4 w-4"/>
-                <span>{minutes} min</span>
+            <div className="flex items-center justify-between text-sm w-full">
+                <div className="flex items-center gap-2 text-primary font-semibold">
+                    <Clock className="h-4 w-4"/>
+                    <span>~ {minutes} min</span>
+                </div>
+                 <span className="text-xs text-muted-foreground">{ (eta.distance / 1000).toFixed(1)} km</span>
             </div>
         </div>
     )
