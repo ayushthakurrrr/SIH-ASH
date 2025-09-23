@@ -225,7 +225,6 @@ export default function UserMapPage() {
   
   const visibleBuses = useMemo(() => {
     if (!selectedRoute) {
-      // Show all buses if no route is selected
       return allBuses;
     }
     const visible: BusLocations = {};
@@ -341,16 +340,33 @@ export default function UserMapPage() {
   
     const busPoints = Object.values(visibleBuses);
     const stopPoints = selectedRoute.stops.map(s => s.position);
-  
+    
+    const allPoints = [...busPoints, ...stopPoints];
+
     if (sourceIndex === -1 || destIndex === -1) {
       return {
         pathSegments: { before: selectedRoute.path, between: [], after: [] },
-        allRoutePoints: [...busPoints, ...stopPoints],
+        allRoutePoints: allPoints,
       };
     }
-  
-    const sourcePathIndex = selectedRoute.path.findIndex(p => p.lat === selectedRoute.stops[sourceIndex].position.lat && p.lng === selectedRoute.stops[sourceIndex].position.lng);
-    const destPathIndex = selectedRoute.path.findIndex(p => p.lat === selectedRoute.stops[destIndex].position.lat && p.lng === selectedRoute.stops[destIndex].position.lng);
+    
+    // A simple way to find a point on the path, this might need to be more robust
+    const findClosestPathIndex = (pos: {lat: number, lng: number}) => {
+        let closestIndex = -1;
+        let minDistance = Infinity;
+
+        selectedRoute.path.forEach((point, index) => {
+            const dist = Math.sqrt(Math.pow(point.lat - pos.lat, 2) + Math.pow(point.lng - pos.lng, 2));
+            if (dist < minDistance) {
+                minDistance = dist;
+                closestIndex = index;
+            }
+        });
+        return closestIndex;
+    }
+
+    const sourcePathIndex = findClosestPathIndex(selectedRoute.stops[sourceIndex].position);
+    const destPathIndex = findClosestPathIndex(selectedRoute.stops[destIndex].position);
   
     const pathBefore = sourcePathIndex > -1 ? selectedRoute.path.slice(0, sourcePathIndex + 1) : [];
     const pathBetween = (sourcePathIndex > -1 && destPathIndex > -1) ? selectedRoute.path.slice(sourcePathIndex, destPathIndex + 1) : [];
@@ -358,7 +374,7 @@ export default function UserMapPage() {
   
     return {
       pathSegments: { before: pathBefore, between: pathBetween, after: pathAfter },
-      allRoutePoints: [...busPoints, ...stopPoints],
+      allRoutePoints: allPoints,
     };
   }, [selectedRoute, sourceStop, destinationStop, visibleBuses]);
 
@@ -386,27 +402,38 @@ export default function UserMapPage() {
                 {Object.entries(visibleBuses).map(([id, pos]) => (
                     <BusMarker key={id} position={pos} busId={id} />
                 ))}
-                {selectedRoute && pathSegments && (
+                {selectedRoute && (
                     <>
                     <FitBounds points={allRoutePoints} />
-                    <Polyline
-                        path={pathSegments.before}
-                        strokeColor="lightgreen"
-                        strokeOpacity={0.5}
-                        strokeWeight={6}
-                    />
-                     <Polyline
-                        path={pathSegments.between}
-                        strokeColor="darkgreen"
-                        strokeOpacity={0.5}
-                        strokeWeight={8}
-                    />
-                    <Polyline
-                        path={pathSegments.after}
-                        strokeColor="lightgreen"
-                        strokeOpacity={0.5}
-                        strokeWeight={6}
-                    />
+                    {pathSegments ? (
+                        <>
+                            <Polyline
+                                path={pathSegments.before}
+                                strokeColor="lightgreen"
+                                strokeOpacity={0.7}
+                                strokeWeight={6}
+                            />
+                            <Polyline
+                                path={pathSegments.between}
+                                strokeColor="darkgreen"
+                                strokeOpacity={0.7}
+                                strokeWeight={8}
+                            />
+                            <Polyline
+                                path={pathSegments.after}
+                                strokeColor="lightgreen"
+                                strokeOpacity={0.7}
+                                strokeWeight={6}
+                            />
+                        </>
+                    ) : (
+                         <Polyline
+                            path={selectedRoute.path}
+                            strokeColor="darkgreen"
+                            strokeOpacity={0.7}
+                            strokeWeight={8}
+                        />
+                    )}
                     {selectedRoute.stops.map((stop, index) => (
                         <StopMarker 
                             key={`stop-${index}-${stop.name}`} 
