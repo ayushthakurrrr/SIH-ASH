@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, type FC, useCallback } from 'react';
 import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
-import { Bus, WifiOff, Route, Clock, PersonStanding, X, GripHorizontal, View, ChevronDown, ChevronUp } from 'lucide-react';
+import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
@@ -13,8 +13,6 @@ import Polyline from '@/components/Polyline';
 import { getEta } from '@/ai/flows/get-eta-flow';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 
 type BusLocations = Record<string, { lat: number; lng: number }>;
 type Etas = Record<string, { duration: number, distance: number } | null>;
@@ -61,14 +59,49 @@ const MissingApiKey: FC = () => (
   </div>
 );
 
-const EtaDisplay: FC<{stopName: string, eta: {duration: number, distance: number} | null | undefined}> = ({stopName, eta}) => {
+const EtaDisplay: FC<{
+    stopName: string, 
+    eta: {duration: number, distance: number} | null | undefined,
+    scheduledTime: string,
+}> = ({stopName, eta, scheduledTime}) => {
+
+    const getStatus = () => {
+        if (eta === undefined || eta === null) return null;
+
+        const now = new Date();
+        const arrivalTime = new Date(now.getTime() + eta.duration * 1000);
+
+        const [time, modifier] = scheduledTime.split(' ');
+        let [hours, minutes] = time.split(':').map(Number);
+
+        if (modifier === 'PM' && hours < 12) {
+            hours += 12;
+        }
+        if (modifier === 'AM' && hours === 12) {
+            hours = 0;
+        }
+
+        const scheduledDateTime = new Date();
+        scheduledDateTime.setHours(hours, minutes, 0, 0);
+        
+        const diffMinutes = Math.round((arrivalTime.getTime() - scheduledDateTime.getTime()) / 60000);
+
+        if (diffMinutes > 2) {
+            return <span className="text-sm font-semibold text-destructive">{diffMinutes} min late</span>;
+        }
+        if (diffMinutes < -2) {
+            return <span className="text-sm font-semibold text-green-600">{-diffMinutes} min early</span>;
+        }
+        return <span className="text-sm font-semibold text-blue-600">On Time</span>;
+    };
+    
     return (
         <div className="flex flex-col items-start gap-1 w-full">
             <span className="font-semibold">{stopName}</span>
             {eta === undefined && ( // Loading state
-                 <div className="flex items-center justify-between w-full">
-                    <Skeleton className="h-5 w-2/3" />
-                    <Skeleton className="h-5 w-1/4" />
+                 <div className="space-y-2 w-full">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-4 w-1/4" />
                 </div>
             )}
             {eta === null && ( // No bus nearby
@@ -76,13 +109,17 @@ const EtaDisplay: FC<{stopName: string, eta: {duration: number, distance: number
             )}
             {eta && ( // ETA available
                 <div className="flex items-center justify-between text-sm w-full">
-                    <div className="flex items-center gap-2 text-primary font-semibold">
+                    <div className="flex items-center gap-2 text-primary">
                         <Clock className="h-4 w-4"/>
-                        <span>~ {Math.round(eta.duration / 60)} min</span>
+                        <span className='font-semibold'>~ {Math.round(eta.duration / 60)} min</span>
+                        <span className="text-xs text-muted-foreground">({ (eta.distance / 1000).toFixed(1)} km)</span>
                     </div>
-                    <span className="text-xs text-muted-foreground">{ (eta.distance / 1000).toFixed(1)} km</span>
+                    {getStatus()}
                 </div>
             )}
+             <div className="text-xs text-muted-foreground">
+                Scheduled for {scheduledTime}
+            </div>
         </div>
     );
 }
@@ -177,82 +214,67 @@ export default function UserMapPage() {
       return;
     }
 
-    // Fill with dummy data for now
-    const dummyEtas: Etas = {};
-    let duration = 5 * 60; // 5 minutes
-    let distance = 1500; // 1.5 km
-
-    for (const stop of selectedRoute.stops) {
-      // For some variety, make some stops have no bus
-      if (Math.random() > 0.8 && Object.keys(visibleBuses).length > 0) {
-        dummyEtas[stop.name] = null;
-      } else if (Object.keys(visibleBuses).length > 0) {
-        dummyEtas[stop.name] = {
-          duration: duration,
-          distance: distance,
-        };
-        duration += (Math.random() * 5 + 2) * 60; // Add 2-7 minutes
-        distance += (Math.random() * 2 + 1) * 1000; // Add 1-3 km
-      } else {
-        dummyEtas[stop.name] = null;
-      }
-    }
-    setEtas(dummyEtas);
-    
-    // The original logic is commented out below
-    /*
     const calculateEtas = async () => {
-        setIsEtaLoading(true);
+      if (Object.keys(visibleBuses).length === 0) {
         const newEtas: Etas = {};
         for (const stop of selectedRoute.stops) {
-            let closestBus: {id: string, location: {lat: number, lng: number}, distance: number} | null = null;
-            
-            // A simple distance calculation, you might want to replace with Google Maps API for real road distance
-            const haversineDistance = (coords1: {lat: number, lng: number}, coords2: {lat: number, lng: number}) => {
-                const toRad = (x: number) => x * Math.PI / 180;
-                const R = 6371; // km
-                const dLat = toRad(coords2.lat - coords1.lat);
-                const dLon = toRad(coords2.lng - coords1.lng);
-                const lat1 = toRad(coords1.lat);
-                const lat2 = toRad(coords2.lat);
-
-                const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                    Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
-                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                return R * c * 1000; // meters
-            }
-            
-            for (const busId in visibleBuses) {
-                const distance = haversineDistance(visibleBuses[busId], stop.position);
-                if (!closestBus || distance < closestBus.distance) {
-                    closestBus = { id: busId, location: visibleBuses[busId], distance };
-                }
-            }
-            
-            if (closestBus) {
-                try {
-                    const etaResult = await getEta({
-                        origin: closestBus.location,
-                        destination: stop.position,
-                    });
-                    newEtas[stop.name] = etaResult;
-                } catch (e) {
-                    console.error("Error fetching ETA for stop", stop.name, e);
-                    newEtas[stop.name] = null;
-                }
-            } else {
-                newEtas[stop.name] = null;
-            }
+          newEtas[stop.name] = null;
         }
         setEtas(newEtas);
         setIsEtaLoading(false);
+        return;
+      }
+        
+      setIsEtaLoading(true);
+      const newEtas: Etas = {};
+
+      const haversineDistance = (coords1: {lat: number, lng: number}, coords2: {lat: number, lng: number}) => {
+          const toRad = (x: number) => x * Math.PI / 180;
+          const R = 6371; // km
+          const dLat = toRad(coords2.lat - coords1.lat);
+          const dLon = toRad(coords2.lng - coords1.lng);
+          const lat1 = toRad(coords1.lat);
+          const lat2 = toRad(coords2.lat);
+
+          const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          return R * c * 1000; // meters
+      }
+
+      for (const stop of selectedRoute.stops) {
+          let closestBus: {id: string, location: {lat: number, lng: number}, distance: number} | null = null;
+          
+          for (const busId in visibleBuses) {
+              const distance = haversineDistance(visibleBuses[busId], stop.position);
+              if (!closestBus || distance < closestBus.distance) {
+                  closestBus = { id: busId, location: visibleBuses[busId], distance };
+              }
+          }
+          
+          if (closestBus) {
+              try {
+                  const etaResult = await getEta({
+                      origin: closestBus.location,
+                      destination: stop.position,
+                  });
+                  newEtas[stop.name] = etaResult;
+              } catch (e) {
+                  console.error("Error fetching ETA for stop", stop.name, e);
+                  newEtas[stop.name] = null;
+              }
+          } else {
+              newEtas[stop.name] = null;
+          }
+      }
+      setEtas(newEtas);
+      setIsEtaLoading(false);
     }
     
     calculateEtas();
     
     const intervalId = setInterval(calculateEtas, 30000);
     return () => clearInterval(intervalId);
-    */
 
   }, [selectedRoute, visibleBuses, isPanelOpen]);
 
@@ -334,10 +356,14 @@ export default function UserMapPage() {
                                             <div className="flex flex-col items-center">
                                                 <PersonStanding className="h-6 w-6 text-primary" />
                                                 {index < selectedRoute.stops.length - 1 && (
-                                                    <div className="w-px h-8 bg-border border-dashed"/>
+                                                    <div className="w-px h-12 bg-border border-dashed"/>
                                                 )}
                                             </div>
-                                            <EtaDisplay stopName={stop.name} eta={isEtaLoading ? undefined : etas[stop.name]} />
+                                            <EtaDisplay 
+                                                stopName={stop.name} 
+                                                eta={isEtaLoading ? undefined : etas[stop.name]}
+                                                scheduledTime={stop.scheduledTime}
+                                            />
                                         </div>
                                     </div>
                                 ))}
