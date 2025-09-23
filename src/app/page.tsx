@@ -13,6 +13,7 @@ import { getFirestore, collection, getDocs } from 'firebase/firestore';
 import { app } from '@/lib/firebase';
 import Polyline from '@/components/Polyline';
 import { getEta } from '@/ai/flows/get-eta-flow';
+import { getRoutePath } from '@/ai/flows/get-route-path-flow';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 
 type BusLocations = Record<string, { lat: number; lng: number }>;
 type Etas = Record<string, { duration: number, distance: number } | null>;
+type RoutePath = { lat: number, lng: number }[];
 
 const Header: FC<{
   busRoutes: BusRoute[];
@@ -236,6 +238,8 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   const [isEtaLoading, setIsEtaLoading] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [showFullPath, setShowFullPath] = useState(true);
+  const [routePath, setRoutePath] = useState<RoutePath | null>(null);
+  const [isPathLoading, setIsPathLoading] = useState(false);
   
   useEffect(() => {
     const newSocket = io();
@@ -266,6 +270,37 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   
   const mapCenter = { lat: 22.7196, lng: 75.8577 }; // Indore
 
+  const selectedRoute = useMemo(() => 
+    selectedRouteId ? busRoutes.find(r => r.id === selectedRouteId) : null,
+  [selectedRouteId, busRoutes]);
+  
+    useEffect(() => {
+    if (!selectedRoute) {
+      setRoutePath(null);
+      return;
+    }
+
+    const fetchPath = async () => {
+      setIsPathLoading(true);
+      try {
+        const { path } = await getRoutePath({ stops: selectedRoute.stops.map(s => s.position) });
+        setRoutePath(path);
+      } catch (error) {
+        console.error("Error fetching route path:", error);
+        toast({
+          variant: "destructive",
+          title: "Could not fetch route path",
+          description: "There was an error fetching the route path from the server.",
+        });
+        setRoutePath(null);
+      } finally {
+        setIsPathLoading(false);
+      }
+    };
+
+    fetchPath();
+  }, [selectedRoute, toast]);
+
   useEffect(() => {
     if (selectedRouteId) {
       setIsPanelOpen(true);
@@ -275,20 +310,23 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         const sourceIndex = busRoutes.find(r => r.id === selectedRouteId)?.stops.findIndex(s => s.name === sourceStop) ?? -1;
         const destIndex = busRoutes.find(r => r.id === selectedRouteId)?.stops.findIndex(s => s.name === destinationStop) ?? -1;
 
-        if (sourceIndex !== -1 && destIndex !== -1 && sourceIndex < destIndex) {
-            setShowFullPath(false);
-        } else {
+        if (sourceIndex === -1 || destIndex === -1 || sourceIndex >= destIndex) {
             setShowFullPath(true);
+            if(sourceStop && destinationStop){
+                toast({
+                    variant: "destructive",
+                    title: "Invalid Stop Selection",
+                    description: "Source must come before the destination on this route.",
+                });
+            }
+        } else {
+            setShowFullPath(false);
         }
     } else {
         setShowFullPath(true);
     }
-  }, [sourceStop, destinationStop, selectedRouteId, busRoutes]);
+  }, [sourceStop, destinationStop, selectedRouteId, busRoutes, toast]);
 
-  const selectedRoute = useMemo(() => 
-    selectedRouteId ? busRoutes.find(r => r.id === selectedRouteId) : null,
-  [selectedRouteId, busRoutes]);
-  
   const visibleBuses = useMemo(() => {
     if (!selectedRoute) {
       return allBuses;
@@ -326,6 +364,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
     setDestinationStop(null);
     setSelectedRouteId(null);
     setIsPanelOpen(false);
+    setRoutePath(null);
   }, []);
 
   useEffect(() => {
@@ -348,6 +387,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
       setIsEtaLoading(true);
       const newEtas: Etas = {};
 
+      // Use Haversine distance for a simple radial search to find nearest bus
       const haversineDistance = (coords1: {lat: number, lng: number}, coords2: {lat: number, lng: number}) => {
           const toRad = (x: number) => x * Math.PI / 180;
           const R = 6371; // km
@@ -375,11 +415,10 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
           
           if (closestBus) {
               try {
-                  const etaResult = await getEta({
+                  newEtas[stop.name] = await getEta({
                       origin: closestBus.location,
                       destination: stop.position,
                   });
-                  newEtas[stop.name] = etaResult;
               } catch (e) {
                   console.error("Error fetching ETA for stop", stop.name, e);
                   newEtas[stop.name] = null;
@@ -398,28 +437,31 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
 
   }, [selectedRoute, visibleBuses, isPanelOpen]);
 
-  const { pathSegments, allRoutePoints, journeyStops } = useMemo(() => {
-    if (!selectedRoute) return { pathSegments: null, allRoutePoints: Object.values(allBuses), journeyStops: [] };
+  const { allRoutePoints, journeyStops, pathSegments } = useMemo(() => {
+    const busPoints = Object.values(visibleBuses);
+    if (!selectedRoute) {
+      return { allRoutePoints: Object.values(allBuses), journeyStops: [], pathSegments: null };
+    }
   
     const sourceIndex = selectedRoute.stops.findIndex(s => s.name === sourceStop);
     const destIndex = selectedRoute.stops.findIndex(s => s.name === destinationStop);
   
-    const busPoints = Object.values(visibleBuses);
-    
-    const stopsToDisplay =
-      showFullPath || sourceIndex === -1 || destIndex === -1 || sourceIndex >= destIndex
+    const stopsToDisplay = showFullPath || sourceIndex === -1 || destIndex === -1 || sourceIndex >= destIndex
         ? selectedRoute.stops
         : selectedRoute.stops.slice(sourceIndex, destIndex + 1);
 
-    const pointsForBounds = showFullPath || sourceIndex === -1 || destIndex === -1 || sourceIndex >= destIndex
-        ? [...busPoints, ...selectedRoute.stops.map(s => s.position)]
-        : [...busPoints, ...stopsToDisplay.map(s => s.position)];
+    const pointsForBounds = [...busPoints, ...stopsToDisplay.map(s => s.position)];
 
-    const findClosestPathIndex = (pos: {lat: number, lng: number}) => {
+    if (!routePath) {
+       return { allRoutePoints: pointsForBounds, journeyStops: stopsToDisplay, pathSegments: null };
+    }
+    
+    // Function to find the closest point on the routePath to a given position
+    const findClosestPointOnPath = (pos: {lat: number, lng: number}) => {
         let closestIndex = -1;
         let minDistance = Infinity;
 
-        selectedRoute.path.forEach((point, index) => {
+        routePath.forEach((point, index) => {
             const dist = Math.sqrt(Math.pow(point.lat - pos.lat, 2) + Math.pow(point.lng - pos.lng, 2));
             if (dist < minDistance) {
                 minDistance = dist;
@@ -428,28 +470,36 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         });
         return closestIndex;
     }
-    
+
     if (sourceIndex === -1 || destIndex === -1 || sourceIndex >= destIndex) {
       return {
-        pathSegments: { before: selectedRoute.path, between: [], after: [] },
+        pathSegments: { before: routePath, between: [], after: [] },
         allRoutePoints: pointsForBounds,
-        journeyStops: stopsToDisplay
+        journeyStops: stopsToDisplay,
       };
     }
 
-    const sourcePathIndex = findClosestPathIndex(selectedRoute.stops[sourceIndex].position);
-    const destPathIndex = findClosestPathIndex(selectedRoute.stops[destIndex].position);
-  
-    const pathBefore = sourcePathIndex > -1 ? selectedRoute.path.slice(0, sourcePathIndex + 1) : [];
-    const pathBetween = (sourcePathIndex > -1 && destPathIndex > -1) ? selectedRoute.path.slice(sourcePathIndex, destPathIndex + 1) : [];
-    const pathAfter = destPathIndex > -1 ? selectedRoute.path.slice(destPathIndex) : [];
+    const sourcePathIndex = findClosestPointOnPath(selectedRoute.stops[sourceIndex].position);
+    const destPathIndex = findClosestPointOnPath(selectedRoute.stops[destIndex].position);
+    
+    if (sourcePathIndex === -1 || destPathIndex === -1) {
+         return {
+            pathSegments: { before: routePath, between: [], after: [] },
+            allRoutePoints: pointsForBounds,
+            journeyStops: stopsToDisplay
+         };
+    }
+
+    const pathBefore = routePath.slice(0, sourcePathIndex + 1);
+    const pathBetween = routePath.slice(sourcePathIndex, destPathIndex + 1);
+    const pathAfter = routePath.slice(destPathIndex);
   
     return {
       pathSegments: { before: pathBefore, between: pathBetween, after: pathAfter },
       allRoutePoints: pointsForBounds,
       journeyStops: stopsToDisplay,
     };
-  }, [selectedRoute, sourceStop, destinationStop, visibleBuses, showFullPath, allBuses]);
+  }, [selectedRoute, sourceStop, destinationStop, visibleBuses, showFullPath, routePath, allBuses]);
 
 
   return (
@@ -481,29 +531,25 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                 ))}
                 
                 {allRoutePoints.length > 0 && <FitBounds points={allRoutePoints} />}
+
+                {isPathLoading && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-card p-2 rounded-md shadow-lg text-sm font-medium">
+                        Drawing route...
+                    </div>
+                )}
                 
-                {selectedRoute && pathSegments && (
+                {selectedRoute && !showFullPath && pathSegments && (
                     <>
-                        <Polyline
-                            path={pathSegments.before}
-                            strokeColor="darkgreen"
-                            strokeOpacity={0.7}
-                            strokeWeight={6}
-                        />
-                        <Polyline
-                            path={pathSegments.between}
-                            strokeColor="lightgreen"
-                            strokeOpacity={0.7}
-                            strokeWeight={8}
-                        />
-                        <Polyline
-                            path={pathSegments.after}
-                            strokeColor="darkgreen"
-                            strokeOpacity={0.7}
-                            strokeWeight={6}
-                        />
+                        <Polyline path={pathSegments.before} strokeColor="darkgray" strokeOpacity={0.6} strokeWeight={5} />
+                        <Polyline path={pathSegments.between} strokeColor="lightgreen" strokeOpacity={0.8} strokeWeight={8} />
+                        <Polyline path={pathSegments.after} strokeColor="darkgray" strokeOpacity={0.6} strokeWeight={5} />
                     </>
                 )}
+
+                {selectedRoute && showFullPath && routePath && (
+                     <Polyline path={routePath} strokeColor="darkgreen" strokeOpacity={0.7} strokeWeight={6} />
+                )}
+
                 {selectedRoute?.stops.map((stop, index) => (
                     <StopMarker 
                         key={`stop-${index}-${stop.name}`} 
