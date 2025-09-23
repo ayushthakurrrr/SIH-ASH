@@ -156,22 +156,22 @@ export default function UserMapPage() {
   
   const mapCenter = { lat: 22.7196, lng: 75.8577 }; // Indore
 
-  const selectedRoute = selectedRouteId !== 'all' ? busRoutes.find(r => r.id === selectedRouteId) : null;
+  const selectedRoute = useMemo(() => 
+    selectedRouteId !== 'all' ? busRoutes.find(r => r.id === selectedRouteId) : null,
+  [selectedRouteId]);
   
-  const getVisibleBuses = () => {
+  const visibleBuses = useMemo(() => {
     if (!selectedRoute) {
       return allBuses;
     }
-    const visibleBuses: BusLocations = {};
+    const visible: BusLocations = {};
     for (const busId of selectedRoute.buses) {
-        if(allBuses[busId]) {
-            visibleBuses[busId] = allBuses[busId];
-        }
+      if (allBuses[busId]) {
+        visible[busId] = allBuses[busId];
+      }
     }
-    return visibleBuses;
-  }
-
-  const visibleBuses = getVisibleBuses();
+    return visible;
+  }, [allBuses, selectedRoute]);
   
   const handleRouteSelect = useCallback((routeId: string) => {
     setSelectedRouteId(routeId);
