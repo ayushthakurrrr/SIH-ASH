@@ -241,8 +241,7 @@ export default function DriverPage() {
       watchId.current = null;
     }
     setIsTracking(false);
-    // Keep location to show last position on map
-    // setLocation(null); 
+    setLocation(null); 
     setStatus(socket.current?.connected ? 'Connected' : 'Disconnected');
   };
 
@@ -419,5 +418,3 @@ export default function DriverPage() {
     </main>
   );
 }
-
-    
