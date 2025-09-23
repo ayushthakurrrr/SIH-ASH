@@ -3,7 +3,7 @@
 import { useState, useEffect, type FC } from 'react';
 import { APIProvider, Map } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
-import { Bus, WifiOff, Route, Clock, PersonStanding, X } from 'lucide-react';
+import { Bus, WifiOff, Route, Clock, PersonStanding, X, GripHorizontal } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
@@ -221,8 +221,8 @@ export default function UserMapPage() {
         onRouteSelect={handleRouteSelect}
         busCount={Object.keys(visibleBuses).length}
       />
-      <main className="flex-grow flex">
-        <div className='flex-grow relative'>
+      <main className="flex-grow flex relative">
+        <div className='flex-grow'>
             {apiKey ? (
             <APIProvider apiKey={apiKey}>
                 <Map
@@ -256,17 +256,20 @@ export default function UserMapPage() {
         </div>
 
         <Sheet open={!!selectedRoute} onOpenChange={(isOpen) => !isOpen && handleRouteSelect('all')}>
-            <SheetContent className="w-[380px] sm:w-[420px] p-0 flex flex-col"
+            <SheetContent side="bottom" className="h-[50vh] p-0 flex flex-col"
                 hideCloseButton={true}
             >
                 {selectedRoute && (
                     <>
-                    <SheetHeader className="p-6 pb-4">
-                        <div className="flex items-center justify-between">
-                             <SheetTitle className="text-2xl">{selectedRoute.name}</SheetTitle>
-                             <button onClick={() => handleRouteSelect('all')} className="p-1 rounded-md hover:bg-muted">
-                                <X className="h-5 w-5" />
-                             </button>
+                    <SheetHeader className="p-4 pb-2 text-center cursor-grab active:cursor-grabbing">
+                        <div className="mx-auto">
+                            <GripHorizontal className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                         <div className="flex items-center justify-between">
+                            <SheetTitle className="text-2xl">{selectedRoute.name}</SheetTitle>
+                            <button onClick={() => handleRouteSelect('all')} className="p-1 rounded-md hover:bg-muted">
+                               <X className="h-5 w-5" />
+                            </button>
                         </div>
                     </SheetHeader>
                     <ScrollArea className="flex-grow">
