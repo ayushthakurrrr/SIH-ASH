@@ -260,7 +260,7 @@ export default function DriverPage() {
         intervalId.current = null;
     }
     setIsTracking(false);
-    // setLocation(null); // Keep location for a moment, then refresh
+    setLocation(null); // Keep location for a moment, then refresh
     setStatus(socket.current?.connected ? 'Connected' : 'Disconnected');
     window.location.reload();
   };
