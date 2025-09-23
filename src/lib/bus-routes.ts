@@ -20,11 +20,15 @@ export const busRoutes: BusRoute[] = [
         ],
         path: [
             { lat: 22.706, lng: 75.873 },
-            { lat: 22.710, lng: 75.876 },
+            { lat: 22.708, lng: 75.874 },
+            { lat: 22.711, lng: 75.877 },
             { lat: 22.715, lng: 75.880 },
+            { lat: 22.718, lng: 75.883 },
             { lat: 22.720, lng: 75.885 },
+            { lat: 22.723, lng: 75.888 },
             { lat: 22.727, lng: 75.891 },
             { lat: 22.735, lng: 75.892 },
+            { lat: 22.744, lng: 75.893 },
             { lat: 22.752, lng: 75.894 },
         ]
     },
@@ -39,15 +43,20 @@ export const busRoutes: BusRoute[] = [
             { name: 'Annapurna Temple', position: { lat: 22.697, lng: 75.833 } },
         ],
         path: [
-            { lat: 22.712, lng: 75.861 },
+            { lat: 22.712, lng: 75.861 }, // Sarwate
             { lat: 22.715, lng: 75.858 },
-            { lat: 22.717, lng: 75.855 },
-            { lat: 22.720, lng: 75.850 },
-            { lat: 22.721, lng: 75.842 },
-            { lat: 22.715, lng: 75.838 },
-            { lat: 22.697, lng: 75.833 },
-            { lat: 22.705, lng: 75.845 },
-            { lat: 22.712, lng: 75.861 },
+            { lat: 22.717, lng: 75.855 }, // Rajwada
+            { lat: 22.718, lng: 75.853 },
+            { lat: 22.720, lng: 75.848 },
+            { lat: 22.721, lng: 75.842 }, // Bada Ganpati
+            { lat: 22.718, lng: 75.839 },
+            { lat: 22.713, lng: 75.836 },
+            { lat: 22.705, lng: 75.832 },
+            { lat: 22.697, lng: 75.833 }, // Annapurna Temple
+            { lat: 22.699, lng: 75.839 },
+            { lat: 22.703, lng: 75.846 },
+            { lat: 22.708, lng: 75.856 },
+            { lat: 22.712, lng: 75.861 }, // Sarwate
         ]
     }
 ];
