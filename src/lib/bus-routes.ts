@@ -106,5 +106,24 @@ export const busRoutes: BusRoute[] = [
             { name: 'Dewas Bus Stand', position: { lat: 22.964, lng: 76.061 }, scheduledTime: '08:15 AM' },
             { name: 'Tata International Dewas', position: { lat: 22.955, lng: 76.004 }, scheduledTime: '08:30 AM' },
         ],
+    },
+    {
+        id: 'route-10',
+        name: 'Route 10: Dewas-Ujjain',
+        buses: ['MP-41-3S', 'MP-41-4T'],
+        stops: [
+            { name: 'Dewas Bus Stand', position: { lat: 22.964, lng: 76.061 }, scheduledTime: '09:00 AM' },
+            { name: 'Ujjain Bus Stand', position: { lat: 23.1793, lng: 75.7849 }, scheduledTime: '09:45 AM' },
+        ],
+    },
+    {
+        id: 'route-11',
+        name: 'Route 11: Ujjain Local',
+        buses: ['MP-13-1U', 'MP-13-2V'],
+        stops: [
+            { name: 'Pipefactory Square', position: { lat: 23.1856, lng: 75.7600 }, scheduledTime: '10:00 AM' },
+            { name: 'Ujjain Engineering College', position: { lat: 23.1785, lng: 75.7598 }, scheduledTime: '10:10 AM' },
+            { name: 'Nanakheda Bus Stand', position: { lat: 23.1558, lng: 75.7725 }, scheduledTime: '10:25 AM' },
+        ],
     }
 ];
