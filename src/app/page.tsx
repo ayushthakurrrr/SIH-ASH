@@ -425,19 +425,19 @@ export default function UserMapPage() {
                         <>
                             <Polyline
                                 path={pathSegments.before}
-                                strokeColor="lightgreen"
+                                strokeColor="darkgreen"
                                 strokeOpacity={0.7}
                                 strokeWeight={6}
                             />
                             <Polyline
                                 path={pathSegments.between}
-                                strokeColor="darkgreen"
+                                strokeColor="lightgreen"
                                 strokeOpacity={0.7}
                                 strokeWeight={8}
                             />
                             <Polyline
                                 path={pathSegments.after}
-                                strokeColor="lightgreen"
+                                strokeColor="darkgreen"
                                 strokeOpacity={0.7}
                                 strokeWeight={6}
                             />
