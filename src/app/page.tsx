@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useMemo, type FC, useCallback, useRef } from 'react';
 import { APIProvider, Map, useMap, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
-import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin, X, RefreshCw, Wifi, AlertTriangle } from 'lucide-react';
+import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin, X, RefreshCw, Wifi, AlertTriangle, Loader2 } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
@@ -30,7 +30,19 @@ type Etas = Record<string, { duration: number, distance: number } | null>;
 type RoutePath = { lat: number, lng: number }[];
 
 
-const UserMarker: FC<{ position: { lat: number, lng: number } }> = ({ position }) => {
+const UserMarker: FC<{ position: { lat: number, lng: number } | null }> = ({ position }) => {
+    if (!position) {
+        return (
+            <AdvancedMarker position={{lat: 0, lng: 0}} >
+                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                    <div className="flex items-center gap-2 bg-background p-2 rounded-lg shadow-lg">
+                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        <span className="text-sm font-medium">Fetching your location...</span>
+                    </div>
+                </div>
+            </AdvancedMarker>
+        );
+    }
     return (
         <AdvancedMarker position={position}>
             <TooltipProvider>
@@ -420,7 +432,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
             },
             {
                 enableHighAccuracy: true,
-                maximumAge: 60000, // Accept a cached position up to 60 seconds old
+                maximumAge: 60000,
             }
         );
     }
@@ -473,7 +485,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         const dLat = toRad(coords2.lat - coords1.lat);
         const dLon = toRad(coords2.lng - coords1.lng);
         const lat1 = toRad(coords1.lat);
-        const lat2 = toRad(coords2.lng);
+        const lat2 = toRad(coords2.lat);
 
         const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
             Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
@@ -817,7 +829,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                     />
                 ))}
 
-                {userLocation && <UserMarker position={userLocation} />}
+                <UserMarker position={userLocation} />
                 
                 {selectedBusId && userLocation ? 
                     <MapController /> :
@@ -955,3 +967,6 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
 }
 
 export default Page;
+
+
+    

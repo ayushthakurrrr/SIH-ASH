@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { PlayCircle, StopCircle, Bus, MapPin, AlertTriangle, Wifi, Route, Navigation, Flag, List, PanelTopClose, PanelTopOpen, LocateFixed } from 'lucide-react';
+import { PlayCircle, StopCircle, Bus, MapPin, AlertTriangle, Wifi, Route, Navigation, Flag, List, PanelTopClose, PanelTopOpen, LocateFixed, Loader2 } from 'lucide-react';
 import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { getFirestore, collection, getDocs } from 'firebase/firestore';
 import { app } from '@/lib/firebase';
@@ -200,6 +200,7 @@ export default function DriverPage() {
   const [recenterKey, setRecenterKey] = useState(0);
   const [isAwayFromStart, setIsAwayFromStart] = useState(false);
   const [pathToStart, setPathToStart] = useState<RoutePath | null>(null);
+  const [isFetchingLocation, setIsFetchingLocation] = useState(false);
 
 
   const socket = useRef<Socket | null>(null);
@@ -282,14 +283,17 @@ export default function DriverPage() {
       return;
     }
     setError(null);
+    setIsFetchingLocation(true);
 
     if (!navigator.geolocation) {
       setError('Geolocation is not supported by your browser.');
+      setIsFetchingLocation(false);
       return;
     }
 
     // Check distance from start
     navigator.geolocation.getCurrentPosition(async (position) => {
+        setIsFetchingLocation(false);
         const currentLoc = { lat: position.coords.latitude, lng: position.coords.longitude };
         const startStop = selectedRoute.stops[0];
         if (!startStop) {
@@ -350,6 +354,7 @@ export default function DriverPage() {
         );
     }, (error) => {
         setError(`Could not get initial location: ${error.message}`);
+        setIsFetchingLocation(false);
     });
   };
 
@@ -562,9 +567,13 @@ export default function DriverPage() {
                 className="w-full transition-all duration-300"
                 variant={isTracking ? 'destructive' : 'default'}
                 size="lg"
-                disabled={!busId || !selectedRouteId}
+                disabled={!busId || !selectedRouteId || isFetchingLocation}
               >
-                {isTracking ? (
+                {isFetchingLocation ? (
+                    <>
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Fetching Location...
+                    </>
+                ) : isTracking ? (
                   <>
                     <StopCircle className="mr-2 h-5 w-5" /> Stop Tracking
                   </>
@@ -600,5 +609,7 @@ export default function DriverPage() {
     </main>
   );
 }
+
+    
 
     
