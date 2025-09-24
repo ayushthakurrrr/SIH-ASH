@@ -325,6 +325,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   const [busNavPath, setBusNavPath] = useState<RoutePath | null>(null);
   const [recenterKey, setRecenterKey] = useState(0);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const map = useMap();
 
 
   // Define a color palette for the buses
