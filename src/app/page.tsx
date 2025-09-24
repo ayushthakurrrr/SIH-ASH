@@ -90,7 +90,7 @@ const Header: FC<{
           </SelectContent>
         </Select>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" onClick={onRefresh} aria-label="Refresh buses">
+          <Button variant="ghost" size="icon" onClick={onRefresh} aria-label="Refresh buses and Recenter Map">
             <RefreshCw className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="icon" onClick={onClear} aria-label="Clear selection">
@@ -180,7 +180,7 @@ const EtaDisplay: FC<{
     );
 }
 
-const FitBounds: FC<{ points: { lat: number; lng: number }[] }> = ({ points }) => {
+const FitBounds: FC<{ points: { lat: number; lng: number }[], deps?: any[] }> = ({ points, deps = [] }) => {
     const map = useMap();
 
     useEffect(() => {
@@ -195,7 +195,8 @@ const FitBounds: FC<{ points: { lat: number; lng: number }[] }> = ({ points }) =
         const bounds = new google.maps.LatLngBounds();
         points.forEach(point => bounds.extend(point));
         map.fitBounds(bounds, 100); // 100 is padding in pixels
-    }, [map, points]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [map, ...deps]);
 
     return null;
 }
@@ -293,13 +294,14 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [etas, setEtas] = useState<Etas>({});
   const [isEtaLoading, setIsEtaLoading] = useState(false);
-  const [isPanelOpen, setIsPanelOpen] = useState(false);
+  const [isPanelOpen, setIsPanelOpen] = useState(true);
   const [showFullPath, setShowFullPath] = useState(true);
   const [routePath, setRoutePath] = useState<RoutePath | null>(null);
   const [isPathLoading, setIsPathLoading] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const [selectedBusId, setSelectedBusId] = useState<string | null>(null);
   const [busNavPath, setBusNavPath] = useState<RoutePath | null>(null);
+  const [recenterKey, setRecenterKey] = useState(0);
 
   // Define a color palette for the buses
   const busColors = useMemo(() => [
@@ -510,6 +512,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
     setSourceStop(null);
     setDestinationStop(null);
     setSelectedBusId(null);
+    setRecenterKey(k => k + 1);
   }, []);
   
   const handleSourceSelect = useCallback((stop: string) => {
@@ -527,13 +530,15 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
     setIsPanelOpen(false);
     setRoutePath(null);
     setSelectedBusId(null);
+    setRecenterKey(k => k + 1);
   }, []);
   
   const handleRefresh = useCallback(() => {
     socketRef.current?.emit('requestInitialLocations');
+    setRecenterKey(k => k + 1);
     toast({
-        title: "Buses Refreshed",
-        description: "The bus locations have been updated.",
+        title: "Map Refreshed",
+        description: "Bus locations have been updated and map view has been recentered.",
     });
   }, [toast]);
   
@@ -704,7 +709,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                     />
                 ))}
                 
-                {allRoutePoints.length > 0 && !selectedBusId && <FitBounds points={allRoutePoints} />}
+                {allRoutePoints.length > 0 && !selectedBusId && <FitBounds points={allRoutePoints} deps={[recenterKey, selectedRouteId]}/>}
 
                 {isPathLoading && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-card p-2 rounded-md shadow-lg text-sm font-medium">
@@ -831,6 +836,7 @@ export default Page;
 
 
     
+
 
 
 
