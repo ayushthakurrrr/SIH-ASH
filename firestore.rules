@@ -1,24 +1,25 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
     // Allow public read access to cities and their routes
     match /cities/{cityId} {
-      allow read: if true;
-      allow write: if false; // Protect cities from being changed by clients
+      allow read;
 
       match /routes/{routeId} {
-        allow read: if true;
-        allow write: if false; // Protect routes from being changed by clients
+        allow read;
       }
     }
 
-    // Allow buses to update their location (no changes here from before)
-    match /buses/{busId} {
-      allow read: if true;
-      allow write: if true;
+    // Users can only read/write their own user document
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Lock down all other writes, but allow reads for admins in functions
+    // Note: this doesn't grant client-side admin read access, that's handled by the function.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
