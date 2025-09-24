@@ -368,6 +368,8 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
 
     newSocket.on('connect', () => {
       console.log('Connected to server');
+      // Request initial locations once connected
+      newSocket.emit('requestInitialLocations');
     });
 
     newSocket.on('initialLocations', (initialBuses: BusLocations) => {
@@ -561,17 +563,20 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   }, [sourceStop, destinationStop, selectedRouteId, busRoutes, toast]);
 
   const visibleBuses = useMemo(() => {
-    if (!selectedRoute) {
+    if (!selectedRouteId) {
       return allBuses;
     }
     const visible: BusLocations = {};
-    for (const busId of selectedRoute.buses) {
-      if (allBuses[busId]) {
-        visible[busId] = allBuses[busId];
-      }
+    const route = busRoutes.find(r => r.id === selectedRouteId);
+    if(route){
+        for (const busId of route.buses) {
+          if (allBuses[busId]) {
+            visible[busId] = allBuses[busId];
+          }
+        }
     }
     return visible;
-  }, [allBuses, selectedRoute]);
+  }, [allBuses, selectedRouteId, busRoutes]);
   
   const handleRouteSelect = useCallback((routeId: string) => {
     if (routeId === "all") {
@@ -679,9 +684,17 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   }, [selectedRoute, visibleBuses, isPanelOpen]);
 
   const { allRoutePoints, journeyStops, pathSegments } = useMemo(() => {
-    let pointsForBounds = Object.values(visibleBuses);
+    const pointsForBounds: {lat: number, lng: number}[] = [];
+
     if (userLocation) {
         pointsForBounds.push(userLocation);
+    }
+    
+    if (selectedRouteId) {
+        const visibleBusLocations = Object.values(visibleBuses);
+        pointsForBounds.push(...visibleBusLocations);
+    } else {
+        pointsForBounds.push(...Object.values(allBuses));
     }
     
     if (!selectedRoute) {
@@ -744,7 +757,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
       allRoutePoints: pointsForBounds,
       journeyStops: stopsToDisplay,
     };
-  }, [selectedRoute, sourceStop, destinationStop, visibleBuses, showFullPath, routePath, userLocation]);
+  }, [selectedRoute, sourceStop, destinationStop, visibleBuses, allBuses, showFullPath, routePath, userLocation, selectedRouteId]);
 
 
   return (
@@ -916,3 +929,5 @@ export default Page;
     
 
     
+
+
