@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { PlayCircle, StopCircle, Bus, MapPin, AlertTriangle, Wifi, Route, Navigation, Flag, List } from 'lucide-react';
+import { PlayCircle, StopCircle, Bus, MapPin, AlertTriangle, Wifi, Route, Navigation, Flag, List, PanelTopClose, PanelTopOpen } from 'lucide-react';
 import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { getFirestore, collection, getDocs } from 'firebase/firestore';
 import { app } from '@/lib/firebase';
@@ -188,6 +188,8 @@ export default function DriverPage() {
   const [error, setError] = useState<string | null>(null);
   const [busRoutes, setBusRoutes] = useState<BusRoute[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  const [isPanelMinimized, setIsPanelMinimized] = useState(false);
+
 
   const socket = useRef<Socket | null>(null);
   const watchId = useRef<number | null>(null);
@@ -353,107 +355,120 @@ export default function DriverPage() {
       <div className="w-full md:w-[400px] shrink-0 border-r flex flex-col">
         <Card className="w-full h-full shadow-none border-0 rounded-none flex flex-col">
             <CardHeader>
-              <div className="flex items-center gap-3 mb-2">
-                <Bus className="h-8 w-8 text-primary" />
-                <CardTitle className="text-3xl font-bold">Driver Panel</CardTitle>
-              </div>
-              <CardDescription>
+                <div className='flex justify-between items-center'>
+                  <div className="flex items-center gap-3">
+                    <Bus className="h-8 w-8 text-primary" />
+                    <CardTitle className="text-3xl font-bold">Driver Panel</CardTitle>
+                  </div>
+                   <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="md:hidden" 
+                        onClick={() => setIsPanelMinimized(!isPanelMinimized)}
+                    >
+                        {isPanelMinimized ? <PanelTopOpen className="h-5 w-5" /> : <PanelTopClose className="h-5 w-5" />}
+                    </Button>
+                </div>
+              <CardDescription className="mt-2">
                 Select your route, start tracking, and see your live navigation.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6 flex-grow">
-              <div className="space-y-2">
-                <Label htmlFor="busId">Bus ID</Label>
-                <Input
-                  id="busId"
-                  placeholder="e.g., Bus-42"
-                  value={busId}
-                  onChange={handleBusIdChange}
-                  disabled={isTracking}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="routeId">Route</Label>
-                <Select onValueChange={handleRouteIdChange} value={selectedRouteId || ""} disabled={isTracking}>
-                    <SelectTrigger id="routeId" className="w-full">
-                        <Route className="h-4 w-4 mr-2 text-muted-foreground" />
-                        <SelectValue placeholder="Select Route" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {busRoutes.map((route) => (
-                            <SelectItem key={route.id} value={route.id}>{route.name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="p-4 rounded-lg bg-muted border space-y-3">
-                <div className='flex justify-between items-center'>
-                    <h3 className="font-semibold text-muted-foreground">Status</h3>
-                    <Badge variant={getStatusVariant()} className="flex items-center gap-2">
-                        {isTracking ? <Wifi className="h-3 w-3 animate-pulse" /> : <Wifi className="h-3 w-3" />}
-                        {status}
-                    </Badge>
+
+            <div className={`${isPanelMinimized ? 'hidden' : ''} md:block flex-grow`}>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="busId">Bus ID</Label>
+                  <Input
+                    id="busId"
+                    placeholder="e.g., Bus-42"
+                    value={busId}
+                    onChange={handleBusIdChange}
+                    disabled={isTracking}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="routeId">Route</Label>
+                  <Select onValueChange={handleRouteIdChange} value={selectedRouteId || ""} disabled={isTracking}>
+                      <SelectTrigger id="routeId" className="w-full">
+                          <Route className="h-4 w-4 mr-2 text-muted-foreground" />
+                          <SelectValue placeholder="Select Route" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          {busRoutes.map((route) => (
+                              <SelectItem key={route.id} value={route.id}>{route.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="p-4 rounded-lg bg-muted border space-y-3">
+                  <div className='flex justify-between items-center'>
+                      <h3 className="font-semibold text-muted-foreground">Status</h3>
+                      <Badge variant={getStatusVariant()} className="flex items-center gap-2">
+                          {isTracking ? <Wifi className="h-3 w-3 animate-pulse" /> : <Wifi className="h-3 w-3" />}
+                          {status}
+                      </Badge>
+                  </div>
+
+                  <div className='flex justify-between items-center text-sm'>
+                      <h3 className="font-semibold text-muted-foreground flex items-center gap-2"><MapPin className="h-4 w-4" /> Location</h3>
+                      <span className="font-mono text-foreground">
+                          {location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : 'N/A'}
+                      </span>
+                  </div>
                 </div>
 
-                <div className='flex justify-between items-center text-sm'>
-                    <h3 className="font-semibold text-muted-foreground flex items-center gap-2"><MapPin className="h-4 w-4" /> Location</h3>
-                    <span className="font-mono text-foreground">
-                        {location ? `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}` : 'N/A'}
-                    </span>
-                </div>
-              </div>
-
-            {isTracking && nextStop && (
-                <div className="p-4 rounded-lg bg-primary/10 border-2 border-dashed border-primary space-y-2 text-center">
-                    <div className="text-sm font-semibold text-primary flex items-center justify-center gap-2">
-                        <Navigation className="h-4 w-4" />
-                        Next Stop
-                    </div>
-                    <p className="text-2xl font-bold text-primary-foreground bg-primary rounded-md p-2 flex items-center justify-center gap-3">
-                        <Flag className="h-6 w-6" />
-                        {nextStop.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Scheduled for {nextStop.scheduledTime}</p>
-                </div>
-            )}
-            
-            {selectedRoute && !isTracking && (
-                <Card>
-                    <CardHeader className='p-4'>
-                        <CardTitle className='text-lg flex items-center gap-2'>
-                            <List className='h-5 w-5' />
-                            Station List
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className='p-0'>
-                        <ScrollArea className='h-48 px-4'>
-                           <div className="space-y-4">
-                                {selectedRoute.stops.map((stop, index) => (
-                                    <div key={stop.name} className="flex items-center gap-3">
-                                        <div className="flex-shrink-0 bg-primary/20 text-primary font-bold rounded-full h-8 w-8 flex items-center justify-center text-sm">
-                                            {index + 1}
-                                        </div>
-                                        <div>
-                                            <p className="font-medium">{stop.name}</p>
-                                            <p className="text-xs text-muted-foreground">Scheduled: {stop.scheduledTime}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                           </div>
-                        </ScrollArea>
-                    </CardContent>
-                </Card>
-            )}
-
-
-              {error && (
-                <div className="flex items-center gap-2 text-sm text-destructive-foreground bg-destructive p-3 rounded-md">
-                    <AlertTriangle className="h-4 w-4" />
-                    <p>{error}</p>
-                </div>
+              {isTracking && nextStop && (
+                  <div className="p-4 rounded-lg bg-primary/10 border-2 border-dashed border-primary space-y-2 text-center">
+                      <div className="text-sm font-semibold text-primary flex items-center justify-center gap-2">
+                          <Navigation className="h-4 w-4" />
+                          Next Stop
+                      </div>
+                      <p className="text-2xl font-bold text-primary-foreground bg-primary rounded-md p-2 flex items-center justify-center gap-3">
+                          <Flag className="h-6 w-6" />
+                          {nextStop.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Scheduled for {nextStop.scheduledTime}</p>
+                  </div>
               )}
-            </CardContent>
+              
+              {selectedRoute && !isTracking && (
+                  <Card>
+                      <CardHeader className='p-4'>
+                          <CardTitle className='text-lg flex items-center gap-2'>
+                              <List className='h-5 w-5' />
+                              Station List
+                          </CardTitle>
+                      </CardHeader>
+                      <CardContent className='p-0'>
+                          <ScrollArea className='h-48 px-4'>
+                             <div className="space-y-4">
+                                  {selectedRoute.stops.map((stop, index) => (
+                                      <div key={stop.name} className="flex items-center gap-3">
+                                          <div className="flex-shrink-0 bg-primary/20 text-primary font-bold rounded-full h-8 w-8 flex items-center justify-center text-sm">
+                                              {index + 1}
+                                          </div>
+                                          <div>
+                                              <p className="font-medium">{stop.name}</p>
+                                              <p className="text-xs text-muted-foreground">Scheduled: {stop.scheduledTime}</p>
+                                          </div>
+                                      </div>
+                                  ))}
+                             </div>
+                          </ScrollArea>
+                      </CardContent>
+                  </Card>
+              )}
+
+
+                {error && (
+                  <div className="flex items-center gap-2 text-sm text-destructive-foreground bg-destructive p-3 rounded-md">
+                      <AlertTriangle className="h-4 w-4" />
+                      <p>{error}</p>
+                  </div>
+                )}
+              </CardContent>
+            </div>
             <CardFooter>
               <Button
                 onClick={handleToggleTracking}
@@ -476,7 +491,7 @@ export default function DriverPage() {
         </Card>
       </div>
 
-      <div className="flex-grow h-1/2 md:h-full bg-muted">
+      <div className="flex-grow h-full bg-muted">
         {isTracking && selectedRoute && location ? (
             <DriverMap 
                 route={selectedRoute} 
@@ -495,3 +510,5 @@ export default function DriverPage() {
     </main>
   );
 }
+
+    
