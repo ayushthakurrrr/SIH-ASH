@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo, type FC, useCallback, useRef } from 'react';
@@ -324,6 +325,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   const [busNavPath, setBusNavPath] = useState<RoutePath | null>(null);
   const [recenterKey, setRecenterKey] = useState(0);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const userLocationWatchId = useRef<number | null>(null);
   
   const MapController: FC = () => {
     const map = useMap();
@@ -394,7 +396,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
 
     // Get user's location
     if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
+        userLocationWatchId.current = navigator.geolocation.watchPosition(
             (position) => {
                 setUserLocation({
                     lat: position.coords.latitude,
@@ -408,12 +410,20 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                     title: "Could not get your location",
                     description: "Please ensure location services are enabled.",
                 });
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 0,
             }
         );
     }
 
     return () => {
       newSocket.disconnect();
+      if (userLocationWatchId.current) {
+        navigator.geolocation.clearWatch(userLocationWatchId.current);
+      }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -902,3 +912,5 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
 }
 
 export default Page;
+
+    
