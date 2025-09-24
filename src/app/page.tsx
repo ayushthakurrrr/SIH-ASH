@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, type FC, useCallback, useRef } from 'react';
-import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
+import { APIProvider, Map, useMap, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
 import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin, X, RefreshCw, Wifi } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
@@ -22,10 +22,32 @@ import { Button } from '@/components/ui/button';
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 type BusLocations = Record<string, { lat: number; lng: number }>;
 type Etas = Record<string, { duration: number, distance: number } | null>;
 type RoutePath = { lat: number, lng: number }[];
+
+
+const UserMarker: FC<{ position: { lat: number, lng: number } }> = ({ position }) => {
+    return (
+        <AdvancedMarker position={position}>
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger>
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-500 border-2 border-white shadow-lg">
+                           <PersonStanding className="h-5 w-5 text-white" />
+                        </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>Your Location</p>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        </AdvancedMarker>
+    );
+};
+
 
 const Header: FC<{
   busRoutes: BusRoute[];
@@ -302,6 +324,8 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   const [selectedBusId, setSelectedBusId] = useState<string | null>(null);
   const [busNavPath, setBusNavPath] = useState<RoutePath | null>(null);
   const [recenterKey, setRecenterKey] = useState(0);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+
 
   // Define a color palette for the buses
   const busColors = useMemo(() => [
@@ -352,9 +376,30 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
       console.log('Disconnected from server');
     });
 
+    // Get user's location
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                setUserLocation({
+                    lat: position.coords.latitude,
+                    lng: position.coords.longitude,
+                });
+            },
+            (error) => {
+                console.error("Error getting user location:", error);
+                toast({
+                    variant: "destructive",
+                    title: "Could not get your location",
+                    description: "Please ensure location services are enabled.",
+                });
+            }
+        );
+    }
+
     return () => {
       newSocket.disconnect();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   const mapCenter = { lat: 22.7196, lng: 75.8577 }; // Indore
@@ -609,8 +654,13 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
 
   const { allRoutePoints, journeyStops, pathSegments } = useMemo(() => {
     const busPoints = Object.values(visibleBuses);
+    let pointsForBounds = [...busPoints];
+    if (userLocation) {
+        pointsForBounds.push(userLocation);
+    }
+    
     if (!selectedRoute) {
-      return { allRoutePoints: Object.values(allBuses), journeyStops: [], pathSegments: null };
+      return { allRoutePoints: pointsForBounds, journeyStops: [], pathSegments: null };
     }
   
     const sourceIndex = selectedRoute.stops.findIndex(s => s.name === sourceStop);
@@ -620,7 +670,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         ? selectedRoute.stops
         : selectedRoute.stops.slice(sourceIndex, destIndex + 1);
 
-    const pointsForBounds = [...busPoints, ...stopsToDisplay.map(s => s.position)];
+    pointsForBounds.push(...stopsToDisplay.map(s => s.position));
 
     if (!routePath) {
        return { allRoutePoints: pointsForBounds, journeyStops: stopsToDisplay, pathSegments: null };
@@ -669,7 +719,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
       allRoutePoints: pointsForBounds,
       journeyStops: stopsToDisplay,
     };
-  }, [selectedRoute, sourceStop, destinationStop, visibleBuses, showFullPath, routePath, allBuses]);
+  }, [selectedRoute, sourceStop, destinationStop, visibleBuses, showFullPath, routePath, userLocation]);
 
 
   return (
@@ -708,6 +758,8 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                         isSelected={selectedBusId === id}
                     />
                 ))}
+
+                {userLocation && <UserMarker position={userLocation} />}
                 
                 {allRoutePoints.length > 0 && !selectedBusId && <FitBounds points={allRoutePoints} deps={[recenterKey, selectedRouteId]}/>}
 
@@ -840,3 +892,6 @@ export default Page;
 
 
 
+
+
+    
