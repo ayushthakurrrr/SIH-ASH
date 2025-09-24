@@ -419,7 +419,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
             },
             {
                 enableHighAccuracy: true,
-                timeout: 5000,
+                timeout: 10000,
                 maximumAge: 0,
             }
         );
@@ -809,7 +809,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                 
                 {selectedBusId && userLocation ? 
                     <MapController /> :
-                    allRoutePoints.length > 0 && <FitBounds points={allRoutePoints} deps={[recenterKey, selectedRouteId]}/>
+                    allRoutePoints.length > 0 && <FitBounds points={allRoutePoints} deps={[recenterKey, selectedRouteId, allBuses]}/>
                 }
 
                 {isPathLoading && (
@@ -939,6 +939,7 @@ export default Page;
     
 
     
+
 
 
 
