@@ -4,7 +4,6 @@
 import { useState, useEffect, useRef, useMemo, type FC } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -38,7 +37,7 @@ const haversineDistance = (coords1: {lat: number, lng: number}, coords2: {lat: n
     return R * c * 1000; // meters
 }
 
-const FitBoundsToDriver: FC<{ driverLocation: { lat: number, lng: number } | null, nextStopLocation: { lat: number, lng: number } | null }> = ({ driverLocation, nextStopLocation }) => {
+const FitBoundsToDriver: FC<{ driverLocation: { lat: number, lng: number } | null, nextStopLocation: { lat: number, lng: number } | null, recenterKey: number }> = ({ driverLocation, nextStopLocation, recenterKey }) => {
     const map = useMap();
 
     useEffect(() => {
@@ -58,7 +57,7 @@ const FitBoundsToDriver: FC<{ driverLocation: { lat: number, lng: number } | nul
         }
         
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [map]); // Run only once when the map loads
+    }, [map, driverLocation, nextStopLocation, recenterKey]);
 
     return null;
 }
@@ -154,7 +153,7 @@ const DriverMap: FC<{
                 {driverLocation && (
                     <>
                         <BusMarker position={driverLocation} busId="Your Location" />
-                        <FitBoundsToDriver key={recenterKey} driverLocation={driverLocation} nextStopLocation={nextStopLocation} />
+                        <FitBoundsToDriver key={recenterKey} driverLocation={driverLocation} nextStopLocation={nextStopLocation} recenterKey={recenterKey} />
                         {nextStopLocation && (
                             <DriverNavigationLine driverLocation={driverLocation} nextStopLocation={nextStopLocation} />
                         )}
@@ -183,7 +182,7 @@ const DriverMap: FC<{
 
 
 export default function DriverPage() {
-  const [busId, setBusId] = useState('');
+  const [busId, setBusId] = useState<string | null>(null);
   const [isTracking, setIsTracking] = useState(false);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [status, setStatus] = useState('Disconnected');
@@ -214,13 +213,16 @@ export default function DriverPage() {
   }, []);
 
   useEffect(() => {
-    const storedBusId = localStorage.getItem('liveTrackBusId');
-    if (storedBusId) {
-      setBusId(storedBusId);
-    }
     const storedRouteId = localStorage.getItem('liveTrackRouteId');
     if (storedRouteId) {
       setSelectedRouteId(storedRouteId);
+      const route = busRoutes.find(r => r.id === storedRouteId);
+      if (route) {
+        const storedBusId = localStorage.getItem('liveTrackBusId');
+        if (storedBusId && route.buses.includes(storedBusId)) {
+          setBusId(storedBusId);
+        }
+      }
     }
 
     const newSocket = io();
@@ -238,10 +240,10 @@ export default function DriverPage() {
         navigator.geolocation.clearWatch(watchId.current);
       }
     };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busRoutes]);
   
-  const handleBusIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newBusId = e.target.value;
+  const handleBusIdChange = (newBusId: string) => {
     setBusId(newBusId);
     localStorage.setItem('liveTrackBusId', newBusId);
   }
@@ -249,11 +251,24 @@ export default function DriverPage() {
   const handleRouteIdChange = (routeId: string) => {
     setSelectedRouteId(routeId);
     localStorage.setItem('liveTrackRouteId', routeId);
+    setBusId(null); // Reset bus ID when route changes
+    localStorage.removeItem('liveTrackBusId');
   }
+  
+  const selectedRoute = useMemo(() => 
+    selectedRouteId ? busRoutes.find(r => r.id === selectedRouteId) : null,
+    [selectedRouteId, busRoutes]
+  );
+  
+  const availableBuses = useMemo(() => {
+    if (!selectedRoute) return [];
+    return selectedRoute.buses;
+  }, [selectedRoute]);
+
 
   const startTracking = () => {
     if (!busId || !selectedRouteId) {
-      setError('Please enter a Bus ID and select a route.');
+      setError('Please select a route and a bus ID.');
       return;
     }
     setError(null);
@@ -296,7 +311,8 @@ export default function DriverPage() {
     }
     setIsTracking(false);
     setStatus(socket.current?.connected ? 'Connected' : 'Disconnected');
-    window.location.reload();
+    // Optional: reload or reset state as needed
+    // window.location.reload(); 
   };
 
   const handleToggleTracking = () => {
@@ -308,15 +324,10 @@ export default function DriverPage() {
   };
 
   const getStatusVariant = () => {
-    if (status.includes('Error') || error) return 'destructive';
+    if (error) return 'destructive';
     if (status.includes('Broadcasting')) return 'default';
     return 'secondary';
   }
-
-  const selectedRoute = useMemo(() => 
-    selectedRouteId ? busRoutes.find(r => r.id === selectedRouteId) : null,
-    [selectedRouteId, busRoutes]
-  );
   
   const nextStopIndex = useMemo(() => {
     if (!location || !selectedRoute) return 0;
@@ -334,8 +345,8 @@ export default function DriverPage() {
     });
 
     // If the driver is very close to a stop, the "next" stop is the one after it.
-    if (minDistance < 50) { // 50 meters threshold
-        return Math.min(closestStopIndex + 1, selectedRoute.stops.length - 1);
+    if (minDistance < 50 && closestStopIndex < selectedRoute.stops.length - 1) { // 50 meters threshold
+        return closestStopIndex + 1;
     }
     
     // Otherwise, find the next stop on the path
@@ -380,16 +391,6 @@ export default function DriverPage() {
             <div className={`${isPanelMinimized ? 'hidden' : ''} md:block flex-grow`}>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="busId">Bus ID</Label>
-                  <Input
-                    id="busId"
-                    placeholder="e.g., Bus-42"
-                    value={busId}
-                    onChange={handleBusIdChange}
-                    disabled={isTracking}
-                  />
-                </div>
-                <div className="space-y-2">
                   <Label htmlFor="routeId">Route</Label>
                   <Select onValueChange={handleRouteIdChange} value={selectedRouteId || ""} disabled={isTracking}>
                       <SelectTrigger id="routeId" className="w-full">
@@ -399,6 +400,21 @@ export default function DriverPage() {
                       <SelectContent>
                           {busRoutes.map((route) => (
                               <SelectItem key={route.id} value={route.id}>{route.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="busId">Bus ID</Label>
+                  <Select onValueChange={handleBusIdChange} value={busId || ""} disabled={isTracking || !selectedRouteId}>
+                      <SelectTrigger id="busId" className="w-full">
+                          <Bus className="h-4 w-4 mr-2 text-muted-foreground" />
+                          <SelectValue placeholder="Select Bus ID" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          {availableBuses.map((bus) => (
+                              <SelectItem key={bus} value={bus}>{bus}</SelectItem>
                           ))}
                       </SelectContent>
                   </Select>
@@ -430,6 +446,7 @@ export default function DriverPage() {
                           </div>
                           <Button variant="outline" size="icon" className='h-7 w-7' onClick={() => setRecenterKey(k => k + 1)}>
                             <LocateFixed className='h-4 w-4'/>
+                            <span className="sr-only">Recenter Map</span>
                           </Button>
                       </div>
                       <p className="text-2xl font-bold text-primary-foreground bg-primary rounded-md p-2 flex items-center justify-center gap-3 text-center">
@@ -477,7 +494,7 @@ export default function DriverPage() {
                 )}
               </CardContent>
             </div>
-            <CardFooter>
+            <CardFooter className="mt-auto">
               <Button
                 onClick={handleToggleTracking}
                 className="w-full transition-all duration-300"
@@ -519,7 +536,3 @@ export default function DriverPage() {
     </main>
   );
 }
-
-    
-
-    
