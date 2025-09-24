@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useMemo, type FC, useCallback, useRef } from 'react';
 import { APIProvider, Map, useMap, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
-import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin, X, RefreshCw, Wifi } from 'lucide-react';
+import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin, X, RefreshCw, Wifi, AlertTriangle } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -202,7 +203,7 @@ const EtaDisplay: FC<{
     );
 }
 
-const FitBounds: FC<{ points: { lat: number; lng: number }[], deps?: any[] }> = ({ points, deps = [] }) => {
+const FitBounds: FC<{ points: { lat: number; lng: number }[], key?: any }> = ({ points }) => {
     const map = useMap();
 
     useEffect(() => {
@@ -218,7 +219,7 @@ const FitBounds: FC<{ points: { lat: number; lng: number }[], deps?: any[] }> = 
         points.forEach(point => bounds.extend(point));
         map.fitBounds(bounds, 100); // 100 is padding in pixels
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [map, ...deps]);
+    }, [map, points]);
 
     return null;
 }
@@ -688,8 +689,9 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRoute, visibleBuses, isPanelOpen]);
 
-  const { allRoutePoints, journeyStops, pathSegments } = useMemo(() => {
+  const { allRoutePoints, journeyStops, pathSegments, isUserFarFromRoute } = useMemo(() => {
     const pointsForBounds: {lat: number, lng: number}[] = [];
+    let userIsFar = false;
 
     if (userLocation) {
         pointsForBounds.push(userLocation);
@@ -699,7 +701,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
     pointsForBounds.push(...busLocations);
     
     if (!selectedRoute) {
-      return { allRoutePoints: pointsForBounds, journeyStops: [], pathSegments: null };
+      return { allRoutePoints: pointsForBounds, journeyStops: [], pathSegments: null, isUserFarFromRoute: false };
     }
   
     const sourceIndex = selectedRoute.stops.findIndex(s => s.name === sourceStop);
@@ -712,9 +714,17 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
     pointsForBounds.push(...stopsToDisplay.map(s => s.position));
 
     if (!routePath) {
-       return { allRoutePoints: pointsForBounds, journeyStops: stopsToDisplay, pathSegments: null };
+       return { allRoutePoints: pointsForBounds, journeyStops: stopsToDisplay, pathSegments: null, isUserFarFromRoute: false };
     }
     
+    // Check if user is far from the route
+    if (userLocation && routePath.length > 0) {
+        const minDistance = Math.min(...routePath.map(point => haversineDistance(userLocation, point)));
+        if (minDistance > 2000) { // 2km threshold
+            userIsFar = true;
+        }
+    }
+
     // Function to find the closest point on the routePath to a given position
     const findClosestPointOnPath = (pos: {lat: number, lng: number}) => {
         let closestIndex = -1;
@@ -735,6 +745,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         pathSegments: { before: routePath, between: [], after: [] },
         allRoutePoints: pointsForBounds,
         journeyStops: stopsToDisplay,
+        isUserFarFromRoute: userIsFar,
       };
     }
 
@@ -745,7 +756,8 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
          return {
             pathSegments: { before: routePath, between: [], after: [] },
             allRoutePoints: pointsForBounds,
-            journeyStops: stopsToDisplay
+            journeyStops: stopsToDisplay,
+            isUserFarFromRoute: userIsFar,
          };
     }
 
@@ -757,6 +769,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
       pathSegments: { before: pathBefore, between: pathBetween, after: pathAfter },
       allRoutePoints: pointsForBounds,
       journeyStops: stopsToDisplay,
+      isUserFarFromRoute: userIsFar,
     };
   }, [selectedRoute, sourceStop, destinationStop, visibleBuses, showFullPath, routePath, userLocation]);
 
@@ -787,7 +800,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                     mapId="livetrack-map"
                     onClick={(e) => {
                         // only deselect bus if we are not clicking on a marker
-                        if (!(e.detail.domEvent.target as HTMLElement).closest('[class*="AdvancedMarker"]')) {
+                        if (e.detail.domEvent && !(e.detail.domEvent.target as HTMLElement).closest('[class*="AdvancedMarker"]')) {
                           setSelectedBusId(null)
                         }
                     }}
@@ -808,7 +821,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                 
                 {selectedBusId && userLocation ? 
                     <MapController /> :
-                    allRoutePoints.length > 0 && <FitBounds points={allRoutePoints} deps={[recenterKey, selectedRouteId, allBuses]}/>
+                    allRoutePoints.length > 0 && <FitBounds points={allRoutePoints} key={recenterKey} />
                 }
 
                 {isPathLoading && (
@@ -872,6 +885,15 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                 </button>
                 {isPanelOpen && (
                     <div className="h-[40vh] flex flex-col">
+                        {isUserFarFromRoute && (
+                            <Alert variant="destructive" className="m-4 mb-0">
+                                <AlertTriangle className="h-4 w-4" />
+                                <AlertTitle>You are far from this route</AlertTitle>
+                                <AlertDescription>
+                                    Your current location is more than 2km away from this bus route. You may not be able to reach a stop easily.
+                                </AlertDescription>
+                            </Alert>
+                        )}
                         <div className="p-4 border-b">
                           <div className='flex justify-between items-center mb-4'>
                               <h2 className="text-2xl font-bold">{selectedRoute.name}</h2>
@@ -933,15 +955,3 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
 }
 
 export default Page;
-
-    
-    
-
-    
-
-
-
-
-
-
-
