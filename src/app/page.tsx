@@ -5,13 +5,13 @@
 import React, { useState, useEffect, useMemo, type FC, useCallback, useRef } from 'react';
 import { APIProvider, Map, useMap, AdvancedMarker } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
-import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin, X, RefreshCw, Wifi, AlertTriangle, Loader2 } from 'lucide-react';
+import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin, X, RefreshCw, Wifi, AlertTriangle, Loader2, Globe } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { BusRoute } from '@/lib/bus-routes';
-import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import type { BusRoute, City } from '@/lib/bus-routes';
+import { getFirestore, collection, getDocs, doc } from 'firebase/firestore';
 import { app } from '@/lib/firebase';
 import Polyline from '@/components/Polyline';
 import { getEta } from '@/ai/flows/get-eta-flow';
@@ -64,17 +64,20 @@ const UserMarker: FC<{ position: { lat: number, lng: number } | null }> = ({ pos
 
 
 const Header: FC<{
+  cities: City[];
   busRoutes: BusRoute[];
+  selectedCityId: string | null;
   selectedRouteId: string | null;
   source: string | null;
   destination: string | null;
+  onCitySelect: (cityId: string) => void;
   onRouteSelect: (routeId: string) => void;
   onSourceSelect: (stop: string) => void;
   onDestinationSelect: (stop: string) => void;
   onClear: () => void;
   onRefresh: () => void;
   busCount: number;
-}> = ({ busRoutes, selectedRouteId, source, destination, onRouteSelect, onSourceSelect, onDestinationSelect, onClear, onRefresh, busCount }) => {
+}> = ({ cities, busRoutes, selectedCityId, selectedRouteId, source, destination, onCitySelect, onRouteSelect, onSourceSelect, onDestinationSelect, onClear, onRefresh, busCount }) => {
   const selectedRouteStops = useMemo(() => {
     if (!selectedRouteId) return [];
     const route = busRoutes.find(r => r.id === selectedRouteId);
@@ -91,7 +94,18 @@ const Header: FC<{
         </div>
       </div>
       <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
-        <Select onValueChange={onRouteSelect} value={selectedRouteId || "all"}>
+        <Select onValueChange={onCitySelect} value={selectedCityId || ""}>
+            <SelectTrigger className="w-full md:w-[150px]">
+                <Globe className="h-4 w-4 mr-2 text-muted-foreground" />
+                <SelectValue placeholder="Select City" />
+            </SelectTrigger>
+            <SelectContent>
+                {cities.map((city) => (
+                    <SelectItem key={city.id} value={city.id}>{city.name}</SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+        <Select onValueChange={onRouteSelect} value={selectedRouteId || "all"} disabled={!selectedCityId}>
             <SelectTrigger className="w-full md:w-[180px]">
                 <Route className="h-4 w-4 mr-2 text-muted-foreground" />
                 <SelectValue placeholder="Select Route" />
@@ -286,25 +300,25 @@ const BusDetailsSheet: FC<{
 }
 
 const Page = () => {
-    const [busRoutes, setBusRoutes] = useState<BusRoute[]>([]);
+    const [cities, setCities] = useState<City[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const fetchRoutes = async () => {
+        const fetchCities = async () => {
             try {
                 const db = getFirestore(app);
-                const routesCollection = collection(db, 'routes');
-                const routesSnapshot = await getDocs(routesCollection);
-                const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BusRoute));
-                setBusRoutes(routesList);
+                const citiesCollection = collection(db, 'cities');
+                const citiesSnapshot = await getDocs(citiesCollection);
+                const citiesList = citiesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as City));
+                setCities(citiesList);
             } catch (error) {
-                console.error("Error fetching routes from Firestore:", error);
+                console.error("Error fetching cities from Firestore:", error);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchRoutes();
+        fetchCities();
     }, []);
 
     if (loading) {
@@ -312,22 +326,24 @@ const Page = () => {
             <div className="flex h-screen w-screen items-center justify-center">
                 <div className="flex flex-col items-center gap-4">
                     <Bus className="h-12 w-12 animate-pulse text-primary" />
-                    <p className="text-muted-foreground">Loading Routes...</p>
+                    <p className="text-muted-foreground">Loading Cities...</p>
                 </div>
             </div>
         )
     }
 
-    return <UserMapPage busRoutes={busRoutes} />;
+    return <UserMapPage cities={cities} />;
 }
 
 
-const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
+const UserMapPage: FC<{cities: City[]}> = ({cities}) => {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const { toast } = useToast();
   const [allBuses, setAllBuses] = useState<BusLocations>({});
+  const [busRoutes, setBusRoutes] = useState<BusRoute[]>([]);
   const [sourceStop, setSourceStop] = useState<string | null>(null);
   const [destinationStop, setDestinationStop] = useState<string | null>(null);
+  const [selectedCityId, setSelectedCityId] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [etas, setEtas] = useState<Etas>({});
   const [isEtaLoading, setIsEtaLoading] = useState(false);
@@ -448,7 +464,36 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
-  const mapCenter = { lat: 22.7196, lng: 75.8577 }; // Indore
+  const selectedCity = useMemo(() => 
+    selectedCityId ? cities.find(c => c.id === selectedCityId) : null,
+  [selectedCityId, cities]);
+
+  const mapCenter = useMemo(() => 
+    selectedCity?.center || { lat: 22.7196, lng: 75.8577 }, // Default to Indore
+  [selectedCity]);
+
+
+  useEffect(() => {
+    if (!selectedCityId) {
+      setBusRoutes([]);
+      return;
+    }
+    const fetchRoutes = async () => {
+        try {
+            const db = getFirestore(app);
+            const cityRef = doc(db, 'cities', selectedCityId);
+            const routesCollection = collection(cityRef, 'routes');
+            const routesSnapshot = await getDocs(routesCollection);
+            const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BusRoute));
+            setBusRoutes(routesList);
+        } catch (error) {
+            console.error(`Error fetching routes for ${selectedCityId}:`, error);
+        }
+    };
+
+    fetchRoutes();
+  }, [selectedCityId]);
+
 
   const selectedRoute = useMemo(() => 
     selectedRouteId ? busRoutes.find(r => r.id === selectedRouteId) : null,
@@ -583,7 +628,19 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
 
   const visibleBuses = useMemo(() => {
     if (!selectedRouteId) {
-      return allBuses;
+        const visible: BusLocations = {};
+        const routesInCity = busRoutes.map(r => r.id);
+        const busesInCity = busRoutes.flatMap(r => r.buses);
+
+        for (const busId of busesInCity) {
+            if (allBuses[busId]) {
+                const routeForBus = busRoutes.find(r => r.buses.includes(busId));
+                if (routeForBus && routesInCity.includes(routeForBus.id)) {
+                    visible[busId] = allBuses[busId];
+                }
+            }
+        }
+        return visible;
     }
     const visible: BusLocations = {};
     const route = busRoutes.find(r => r.id === selectedRouteId);
@@ -597,6 +654,16 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
     return visible;
   }, [allBuses, selectedRouteId, busRoutes]);
   
+  const handleCitySelect = useCallback((cityId: string) => {
+    setSelectedCityId(cityId);
+    setSelectedRouteId(null);
+    setSourceStop(null);
+    setDestinationStop(null);
+    setSelectedBusId(null);
+    setIsPanelOpen(false);
+    setRecenterKey(k => k + 1);
+  }, []);
+
   const handleRouteSelect = useCallback((routeId: string) => {
     if (routeId === "all") {
         setSelectedRouteId(null);
@@ -619,6 +686,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   }, []);
   
   const handleClear = useCallback(() => {
+    setSelectedCityId(null);
     setSourceStop(null);
     setDestinationStop(null);
     setSelectedRouteId(null);
@@ -711,6 +779,10 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         pointsForBounds.push(userLocation);
     }
     
+    if (selectedCity && !selectedRouteId) {
+        pointsForBounds.push(selectedCity.center);
+    }
+
     const busLocations = Object.values(visibleBuses);
     pointsForBounds.push(...busLocations);
     
@@ -785,7 +857,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
       journeyStops: stopsToDisplay,
       isUserFarFromRoute: userIsFar,
     };
-  }, [selectedRoute, sourceStop, destinationStop, visibleBuses, showFullPath, routePath, userLocation]);
+  }, [selectedCity, selectedRoute, sourceStop, destinationStop, visibleBuses, showFullPath, routePath, userLocation]);
 
 
   return (
@@ -793,10 +865,13 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
       <main className="h-full w-full">
         <div className="h-full w-full relative">
           <Header 
+            cities={cities}
             busRoutes={busRoutes}
+            selectedCityId={selectedCityId}
             selectedRouteId={selectedRouteId}
             source={sourceStop}
             destination={destinationStop}
+            onCitySelect={handleCitySelect}
             onRouteSelect={handleRouteSelect}
             onSourceSelect={handleSourceSelect}
             onDestinationSelect={handleDestinationSelect}
@@ -809,6 +884,8 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                 <Map
                     defaultCenter={mapCenter}
                     defaultZoom={12}
+                    center={mapCenter}
+                    key={recenterKey}
                     gestureHandling={'greedy'}
                     disableDefaultUI={true}
                     mapId="livetrack-map"
@@ -881,7 +958,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
             />
         </div>
 
-        {selectedRoute && (
+        {selectedCity && selectedRoute && (
              <div className="absolute bottom-0 left-0 right-0 z-10 bg-card border-t rounded-t-lg shadow-[0_-4px_16px_rgba(0,0,0,0.1)]">
                 <button 
                     onClick={() => setIsPanelOpen(!isPanelOpen)}
@@ -903,6 +980,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                             <Alert variant="destructive" className="m-4 mb-0">
                                 <AlertTriangle className="h-4 w-4" />
                                 <AlertTitle>You are far from this route</AlertTitle>
+
                                 <AlertDescription>
                                     Your current location is more than 2km away from this bus route. You may not be able to reach a stop easily.
                                 </AlertDescription>

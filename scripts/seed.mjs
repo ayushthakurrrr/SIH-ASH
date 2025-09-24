@@ -1,57 +1,59 @@
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import { busRoutes } from '../src/lib/bus-routes.js';
-import 'dotenv/config';
 
-// This script will seed the bus route data into your Firestore database.
-// It's designed to be run from the command line.
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, doc, setDoc, writeBatch } from 'firebase/firestore';
+import { busRoutesByCity } from '../src/lib/bus-routes.js';
+import dotenv from 'dotenv';
+
+// Configure dotenv to load environment variables
+dotenv.config({ path: '.env.local' });
+dotenv.config({ path: '.env' });
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+};
+
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 async function seedDatabase() {
-  try {
-    console.log('Initializing Firebase Admin SDK...');
+    console.log('Starting to seed database...');
 
-    // Use Application Default Credentials, specifying only the projectId.
-    // This is a more robust method for authentication in many environments.
-    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-    if (!projectId) {
-      throw new Error('NEXT_PUBLIC_FIREBASE_PROJECT_ID is not set in your .env file.');
+    const batch = writeBatch(db);
+
+    for (const city of busRoutesByCity.cities) {
+        console.log(`Processing city: ${city.name}`);
+        const cityRef = doc(db, 'cities', city.id);
+        batch.set(cityRef, { name: city.name, center: city.center });
+
+        const routesCollectionRef = collection(cityRef, 'routes');
+        for (const route of city.routes) {
+            console.log(`  Adding route: ${route.name}`);
+            const routeRef = doc(routesCollectionRef, route.id);
+            // Add cityId to each route for easier lookup if ever needed
+            batch.set(routeRef, { ...route, cityId: city.id });
+        }
     }
 
-    if (!getApps().length) {
-        initializeApp({
-            projectId: projectId,
-        });
+    try {
+        await batch.commit();
+        console.log('Database seeded successfully!');
+    } catch (error) {
+        console.error('Error seeding database:', error);
     }
-
-    const db = getFirestore();
-    console.log('Firestore initialized.');
-
-    const routesCollection = db.collection('routes');
-    const batch = db.batch();
-
-    console.log('Preparing to seed bus routes...');
-
-    for (const route of busRoutes) {
-      // We remove the 'path' property as it's no longer part of the data model.
-      const { path, ...routeData } = route;
-      const docRef = routesCollection.doc(route.id);
-      batch.set(docRef, routeData);
-      console.log(`- Staging route: ${route.name} (${route.id})`);
-    }
-
-    console.log('Committing batch to Firestore...');
-    await batch.commit();
-
-    console.log('✅ Database seeded successfully!');
-  } catch (error) {
-    console.error('\n❌ Error seeding database:', error.message);
-    if (error.code === 'PERMISSION_DENIED' || error.code === 7) {
-        console.error('\nPlease ensure your Firestore security rules allow write access for the Admin SDK.');
-    } else if (error.codePrefix === 'app' || error.message.includes('credential')) {
-        console.error('\nPlease check your Firebase project configuration and authentication setup.');
-    }
-    process.exit(1);
-  }
 }
 
-seedDatabase();
+seedDatabase().then(() => {
+    // Manually exit the process, as the Firestore connection may keep it alive.
+    process.exit(0);
+}).catch(error => {
+    console.error("Seeding script failed:", error);
+    process.exit(1);
+});

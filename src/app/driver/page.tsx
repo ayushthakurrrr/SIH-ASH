@@ -1,17 +1,17 @@
 
 "use client";
 
-import { useState, useEffect, useRef, useMemo, type FC } from 'react';
+import { useState, useEffect, useRef, useMemo, type FC, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { PlayCircle, StopCircle, Bus, MapPin, AlertTriangle, Wifi, Route, Navigation, Flag, List, PanelTopClose, PanelTopOpen, LocateFixed, Loader2 } from 'lucide-react';
+import { PlayCircle, StopCircle, Bus, MapPin, AlertTriangle, Wifi, Route, Navigation, Flag, List, PanelTopClose, PanelTopOpen, LocateFixed, Loader2, Globe } from 'lucide-react';
 import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
-import { getFirestore, collection, getDocs } from 'firebase/firestore';
+import { getFirestore, collection, getDocs, doc } from 'firebase/firestore';
 import { app } from '@/lib/firebase';
-import type { BusRoute } from '@/lib/bus-routes';
+import type { BusRoute, City } from '@/lib/bus-routes';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getRoutePath } from '@/ai/flows/get-route-path-flow';
 import { getEta } from '@/ai/flows/get-eta-flow';
@@ -194,6 +194,8 @@ export default function DriverPage() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [status, setStatus] = useState('Disconnected');
   const [error, setError] = useState<string | null>(null);
+  const [cities, setCities] = useState<City[]>([]);
+  const [selectedCityId, setSelectedCityId] = useState<string | null>(null);
   const [busRoutes, setBusRoutes] = useState<BusRoute[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [isPanelMinimized, setIsPanelMinimized] = useState(false);
@@ -208,34 +210,72 @@ export default function DriverPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const fetchRoutes = async () => {
+    const fetchCities = async () => {
         try {
             const db = getFirestore(app);
-            const routesCollection = collection(db, 'routes');
-            const routesSnapshot = await getDocs(routesCollection);
-            const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BusRoute));
-            setBusRoutes(routesList);
+            const citiesCollection = collection(db, 'cities');
+            const citiesSnapshot = await getDocs(citiesCollection);
+            const citiesList = citiesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as City));
+            setCities(citiesList);
+
+            const storedCityId = localStorage.getItem('liveTrackCityId');
+            if (storedCityId && citiesList.some(c => c.id === storedCityId)) {
+                setSelectedCityId(storedCityId);
+            }
+
         } catch (error) {
-            console.error("Error fetching routes from Firestore:", error);
-            setError("Could not load bus routes from database.");
+            console.error("Error fetching cities from Firestore:", error);
+            setError("Could not load cities from database.");
         }
     };
-    fetchRoutes();
+    fetchCities();
+  }, []);
+  
+  const handleCityIdChange = useCallback((cityId: string) => {
+    setSelectedCityId(cityId);
+    localStorage.setItem('liveTrackCityId', cityId);
+    setSelectedRouteId(null);
+    setBusId(null);
+    localStorage.removeItem('liveTrackRouteId');
+    localStorage.removeItem('liveTrackBusId');
   }, []);
 
   useEffect(() => {
-    const storedRouteId = localStorage.getItem('liveTrackRouteId');
-    if (storedRouteId) {
-      setSelectedRouteId(storedRouteId);
-      const route = busRoutes.find(r => r.id === storedRouteId);
-      if (route) {
-        const storedBusId = localStorage.getItem('liveTrackBusId');
-        if (storedBusId && route.buses.includes(storedBusId)) {
-          setBusId(storedBusId);
-        }
-      }
+    if (!selectedCityId) {
+        setBusRoutes([]);
+        return;
     }
+    const fetchRoutes = async () => {
+        try {
+            const db = getFirestore(app);
+            const cityRef = doc(db, 'cities', selectedCityId);
+            const routesCollection = collection(cityRef, 'routes');
+            const routesSnapshot = await getDocs(routesCollection);
+            const routesList = routesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BusRoute));
+            setBusRoutes(routesList);
+            
+            const storedRouteId = localStorage.getItem('liveTrackRouteId');
+            if (storedRouteId && routesList.some(r => r.id === storedRouteId)) {
+              setSelectedRouteId(storedRouteId);
+              const route = routesList.find(r => r.id === storedRouteId);
+              if (route) {
+                const storedBusId = localStorage.getItem('liveTrackBusId');
+                if (storedBusId && route.buses.includes(storedBusId)) {
+                  setBusId(storedBusId);
+                }
+              }
+            }
 
+        } catch (error) {
+            console.error(`Error fetching routes for ${selectedCityId}:`, error);
+            setError(`Could not load routes for ${selectedCityId}.`);
+        }
+    };
+    fetchRoutes();
+  }, [selectedCityId]);
+
+
+  useEffect(() => {
     const newSocket = io();
     socket.current = newSocket;
 
@@ -252,7 +292,7 @@ export default function DriverPage() {
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busRoutes]);
+  }, []);
   
   const handleBusIdChange = (newBusId: string) => {
     setBusId(newBusId);
@@ -279,7 +319,7 @@ export default function DriverPage() {
 
   const startTracking = () => {
     if (!busId || !selectedRoute) {
-      setError('Please select a route and a bus ID.');
+      setError('Please select a city, route, and a bus ID.');
       return;
     }
     setError(null);
@@ -441,15 +481,30 @@ export default function DriverPage() {
                     </Button>
                 </div>
               <CardDescription className="mt-2">
-                Select your route, start tracking, and see your live navigation.
+                Select your city and route, start tracking, and see your live navigation.
               </CardDescription>
             </CardHeader>
 
             <div className={`${isPanelMinimized ? 'hidden' : ''} md:block flex-grow`}>
               <CardContent className="space-y-6">
+                 <div className="space-y-2">
+                  <Label htmlFor="cityId">City</Label>
+                  <Select onValueChange={handleCityIdChange} value={selectedCityId || ""} disabled={isTracking}>
+                      <SelectTrigger id="cityId" className="w-full">
+                          <Globe className="h-4 w-4 mr-2 text-muted-foreground" />
+                          <SelectValue placeholder="Select City" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          {cities.map((city) => (
+                              <SelectItem key={city.id} value={city.id}>{city.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="routeId">Route</Label>
-                  <Select onValueChange={handleRouteIdChange} value={selectedRouteId || ""} disabled={isTracking}>
+                  <Select onValueChange={handleRouteIdChange} value={selectedRouteId || ""} disabled={isTracking || !selectedCityId}>
                       <SelectTrigger id="routeId" className="w-full">
                           <Route className="h-4 w-4 mr-2 text-muted-foreground" />
                           <SelectValue placeholder="Select Route" />
@@ -601,7 +656,7 @@ export default function DriverPage() {
             <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8">
                 <MapPin size={48} className="text-muted-foreground" />
                 <h3 className="text-xl font-semibold">Your Map Will Appear Here</h3>
-                <p className="text-muted-foreground">Please select a route and start tracking to see your live position and navigation.</p>
+                <p className="text-muted-foreground">Please select a city and route, then start tracking to see your live position.</p>
             </div>
         )}
       </div>
