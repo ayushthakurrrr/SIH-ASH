@@ -345,8 +345,7 @@ export default function DriverPage() {
           },
           {
             enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0,
+            maximumAge: 60000,
           }
         );
     }, (error) => {
@@ -601,3 +600,5 @@ export default function DriverPage() {
     </main>
   );
 }
+
+    
