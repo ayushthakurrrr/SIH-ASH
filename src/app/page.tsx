@@ -419,8 +419,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
             },
             {
                 enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 0,
+                maximumAge: 60000, // Accept a cached position up to 60 seconds old
             }
         );
     }
@@ -939,6 +938,7 @@ export default Page;
     
 
     
+
 
 
 
