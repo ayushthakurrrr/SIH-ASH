@@ -3,7 +3,8 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   /* config options here */
-  reactStrictMode: true,
+  poweredByHeader: false,
+  reactStrictMode: false,
   serverActions: true,
   typescript: {
     ignoreBuildErrors: true,
@@ -26,7 +27,7 @@ const nextConfig: NextConfig = {
         pathname: '/**',
       },
       {
-        protocol: 'https',
+        protocol: 'https,"
         hostname: 'picsum.photos',
         port: '',
         pathname: '/**',
