@@ -68,7 +68,7 @@ const Header: FC<{
   }, [selectedRouteId, busRoutes]);
 
   return (
-    <header className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-card border-b shadow-sm z-10 shrink-0">
+    <header className="absolute top-0 left-0 right-0 flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-card border-b shadow-sm z-20 shrink-0">
       <div className="flex items-center gap-3">
         <Bus size={32} className="text-primary" />
         <h1 className="text-2xl font-bold text-foreground">LiveTrack</h1>
@@ -763,21 +763,21 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
 
 
   return (
-    <div className="flex flex-col h-screen bg-background">
-      <Header 
-        busRoutes={busRoutes}
-        selectedRouteId={selectedRouteId}
-        source={sourceStop}
-        destination={destinationStop}
-        onRouteSelect={handleRouteSelect}
-        onSourceSelect={handleSourceSelect}
-        onDestinationSelect={handleDestinationSelect}
-        onClear={handleClear}
-        onRefresh={handleRefresh}
-        busCount={Object.keys(allBuses).length}
-      />
-      <main className="flex-grow flex flex-col overflow-hidden">
-        <div className="flex-grow h-full relative">
+    <div className="relative h-screen w-screen overflow-hidden bg-background">
+      <main className="h-full w-full">
+        <div className="h-full w-full relative">
+          <Header 
+            busRoutes={busRoutes}
+            selectedRouteId={selectedRouteId}
+            source={sourceStop}
+            destination={destinationStop}
+            onRouteSelect={handleRouteSelect}
+            onSourceSelect={handleSourceSelect}
+            onDestinationSelect={handleDestinationSelect}
+            onClear={handleClear}
+            onRefresh={handleRefresh}
+            busCount={Object.keys(allBuses).length}
+          />
             {apiKey ? (
             <APIProvider apiKey={apiKey}>
                 <Map
@@ -813,7 +813,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                 }
 
                 {isPathLoading && (
-                    <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-card p-2 rounded-md shadow-lg text-sm font-medium">
+                    <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-card p-2 rounded-md shadow-lg text-sm font-medium z-10">
                         Drawing route...
                     </div>
                 )}
@@ -856,7 +856,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         </div>
 
         {selectedRoute && (
-            <div className="shrink-0 border-t bg-card">
+             <div className="absolute bottom-0 left-0 right-0 z-10 bg-card border-t rounded-t-lg shadow-[0_-4px_16px_rgba(0,0,0,0.1)]">
                 <button 
                     onClick={() => setIsPanelOpen(!isPanelOpen)}
                     className="w-full p-2 flex items-center justify-center text-sm font-medium text-muted-foreground hover:bg-muted"
@@ -939,6 +939,7 @@ export default Page;
     
 
     
+
 
 
 
