@@ -340,6 +340,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         bounds.extend(busLocation);
         map.fitBounds(bounds, 150);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [map, selectedBusId, userLocation, allBuses]);
 
     return null;
@@ -390,6 +391,9 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         delete newBuses[busId];
         return newBuses;
       });
+      if (selectedBusId === busId) {
+        setSelectedBusId(null);
+      }
     });
 
     newSocket.on('disconnect', () => {
@@ -533,6 +537,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
 
         fetchNavPath();
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedBusId, allBuses, busRoutes]);
 
 
@@ -681,6 +686,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
     const intervalId = setInterval(calculateEtas, 30000);
     return () => clearInterval(intervalId);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRoute, visibleBuses, isPanelOpen]);
 
   const { allRoutePoints, journeyStops, pathSegments } = useMemo(() => {
@@ -690,12 +696,8 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         pointsForBounds.push(userLocation);
     }
     
-    if (selectedRouteId) {
-        const visibleBusLocations = Object.values(visibleBuses);
-        pointsForBounds.push(...visibleBusLocations);
-    } else {
-        pointsForBounds.push(...Object.values(allBuses));
-    }
+    const busLocations = Object.values(visibleBuses);
+    pointsForBounds.push(...busLocations);
     
     if (!selectedRoute) {
       return { allRoutePoints: pointsForBounds, journeyStops: [], pathSegments: null };
@@ -757,7 +759,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
       allRoutePoints: pointsForBounds,
       journeyStops: stopsToDisplay,
     };
-  }, [selectedRoute, sourceStop, destinationStop, visibleBuses, allBuses, showFullPath, routePath, userLocation, selectedRouteId]);
+  }, [selectedRoute, sourceStop, destinationStop, visibleBuses, showFullPath, routePath, userLocation]);
 
 
   return (
@@ -784,9 +786,14 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                     gestureHandling={'greedy'}
                     disableDefaultUI={true}
                     mapId="livetrack-map"
-                    onClick={() => setSelectedBusId(null)}
+                    onClick={(e) => {
+                        // only deselect bus if we are not clicking on a marker
+                        if (!(e.detail.domEvent.target as HTMLElement).closest('[class*="AdvancedMarker"]')) {
+                          setSelectedBusId(null)
+                        }
+                    }}
                 >
-                <MapController />
+                
                 {Object.entries(visibleBuses).map(([id, pos]) => (
                     <BusMarker
                         key={id}
@@ -800,7 +807,10 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
 
                 {userLocation && <UserMarker position={userLocation} />}
                 
-                {allRoutePoints.length > 0 && !selectedBusId && <FitBounds points={allRoutePoints} deps={[recenterKey, selectedRouteId]}/>}
+                {selectedBusId && userLocation ? 
+                    <MapController /> :
+                    allRoutePoints.length > 0 && <FitBounds points={allRoutePoints} deps={[recenterKey]}/>
+                }
 
                 {isPathLoading && (
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-card p-2 rounded-md shadow-lg text-sm font-medium">
@@ -824,7 +834,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                     <Polyline path={busNavPath} strokeColor="#4285F4" strokeOpacity={0.9} strokeWeight={8} />
                 )}
 
-                {selectedRoute?.stops.map((stop, index) => (
+                {journeyStops?.map((stop, index) => (
                     <StopMarker 
                         key={`stop-${index}-${stop.name}`} 
                         position={stop.position} 
@@ -929,5 +939,6 @@ export default Page;
     
 
     
+
 
 
