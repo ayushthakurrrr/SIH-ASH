@@ -20,6 +20,7 @@ import StopMarker from '@/components/StopMarker';
 import Polyline from '@/components/Polyline';
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 type RoutePath = { lat: number; lng: number }[];
 
@@ -107,7 +108,9 @@ const DriverMap: FC<{
     driverLocation: { lat: number; lng: number; };
     nextStopIndex: number;
     recenterKey: number;
-}> = ({ route, driverLocation, nextStopIndex, recenterKey }) => {
+    isAwayFromStart: boolean;
+    pathToStart: RoutePath | null;
+}> = ({ route, driverLocation, nextStopIndex, recenterKey, isAwayFromStart, pathToStart }) => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     const { toast } = useToast();
     const [routePath, setRoutePath] = useState<RoutePath | null>(null);
@@ -139,7 +142,9 @@ const DriverMap: FC<{
         return <div className="flex items-center justify-center h-full bg-muted text-destructive text-center p-4">Google Maps API Key is missing.</div>
     }
     
-    const nextStopLocation = route.stops[nextStopIndex]?.position || null;
+    const nextStopLocation = (isAwayFromStart && route.stops.length > 0)
+        ? route.stops[0].position
+        : route.stops[nextStopIndex]?.position || null;
 
     return (
         <APIProvider apiKey={apiKey}>
@@ -154,8 +159,10 @@ const DriverMap: FC<{
                     <>
                         <BusMarker position={driverLocation} busId="Your Location" />
                         <FitBoundsToDriver key={recenterKey} driverLocation={driverLocation} nextStopLocation={nextStopLocation} recenterKey={recenterKey} />
-                        {nextStopLocation && (
-                            <DriverNavigationLine driverLocation={driverLocation} nextStopLocation={nextStopLocation} />
+                        {isAwayFromStart && pathToStart ? (
+                             <Polyline path={pathToStart} strokeColor="#F4B400" strokeOpacity={0.9} strokeWeight={8} />
+                        ) : (
+                            nextStopLocation && <DriverNavigationLine driverLocation={driverLocation} nextStopLocation={nextStopLocation} />
                         )}
                     </>
                 )}
@@ -167,7 +174,7 @@ const DriverMap: FC<{
                         key={`stop-${index}-${stop.name}`} 
                         position={stop.position} 
                         stopName={stop.name} 
-                        isSourceOrDest={index === nextStopIndex}
+                        isSourceOrDest={isAwayFromStart ? index === 0 : index === nextStopIndex}
                     />
                 ))}
             </Map>
@@ -191,10 +198,13 @@ export default function DriverPage() {
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [isPanelMinimized, setIsPanelMinimized] = useState(false);
   const [recenterKey, setRecenterKey] = useState(0);
+  const [isAwayFromStart, setIsAwayFromStart] = useState(false);
+  const [pathToStart, setPathToStart] = useState<RoutePath | null>(null);
 
 
   const socket = useRef<Socket | null>(null);
   const watchId = useRef<number | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     const fetchRoutes = async () => {
@@ -267,7 +277,7 @@ export default function DriverPage() {
 
 
   const startTracking = () => {
-    if (!busId || !selectedRouteId) {
+    if (!busId || !selectedRoute) {
       setError('Please select a route and a bus ID.');
       return;
     }
@@ -278,30 +288,70 @@ export default function DriverPage() {
       return;
     }
 
-    watchId.current = navigator.geolocation.watchPosition(
-      (position) => {
-        const newLocation = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        };
-        setLocation(newLocation);
-        if (socket.current?.connected) {
-          socket.current.emit('updateLocation', { busId, location: newLocation });
-          setStatus('Broadcasting Location');
+    // Check distance from start
+    navigator.geolocation.getCurrentPosition(async (position) => {
+        const currentLoc = { lat: position.coords.latitude, lng: position.coords.longitude };
+        const startStop = selectedRoute.stops[0];
+        if (!startStop) {
+            setError("Selected route has no stops defined.");
+            return;
         }
-      },
-      (geoError) => {
-        setError(`Geolocation error: ${geoError.message}`);
-        stopTracking();
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
-      }
-    );
 
-    setIsTracking(true);
+        const distance = haversineDistance(currentLoc, startStop.position);
+        if (distance > 200) { // 200 meters threshold
+            setIsAwayFromStart(true);
+            try {
+                const { path } = await getEta({ origin: currentLoc, destination: startStop.position });
+                if(path) {
+                    setPathToStart(path);
+                }
+            } catch (e) {
+                console.error("Failed to get path to start", e);
+                toast({
+                    variant: "destructive",
+                    title: "Could not get directions",
+                    description: "Failed to calculate path to the route's starting point."
+                });
+            }
+        } else {
+            setIsAwayFromStart(false);
+            setPathToStart(null);
+        }
+
+        // Now, start continuous tracking
+        setIsTracking(true);
+        watchId.current = navigator.geolocation.watchPosition(
+          (pos) => {
+            const newLocation = {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+            };
+            setLocation(newLocation);
+             if (isAwayFromStart) {
+                const distToStart = haversineDistance(newLocation, startStop.position);
+                if (distToStart <= 200) {
+                    setIsAwayFromStart(false);
+                    setPathToStart(null);
+                }
+            }
+            if (socket.current?.connected) {
+              socket.current.emit('updateLocation', { busId, location: newLocation });
+              setStatus('Broadcasting Location');
+            }
+          },
+          (geoError) => {
+            setError(`Geolocation error: ${geoError.message}`);
+            stopTracking();
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0,
+          }
+        );
+    }, (error) => {
+        setError(`Could not get initial location: ${error.message}`);
+    });
   };
 
   const stopTracking = () => {
@@ -310,9 +360,9 @@ export default function DriverPage() {
       watchId.current = null;
     }
     setIsTracking(false);
+    setIsAwayFromStart(false);
+    setPathToStart(null);
     setStatus(socket.current?.connected ? 'Connected' : 'Disconnected');
-    // Optional: reload or reset state as needed
-    // window.location.reload(); 
   };
 
   const handleToggleTracking = () => {
@@ -343,6 +393,8 @@ export default function DriverPage() {
             closestStopIndex = index;
         }
     });
+    
+    if (closestStopIndex === -1) return 0;
 
     // If the driver is very close to a stop, the "next" stop is the one after it.
     if (minDistance < 50 && closestStopIndex < selectedRoute.stops.length - 1) { // 50 meters threshold
@@ -361,8 +413,9 @@ export default function DriverPage() {
 
   const nextStop = useMemo(() => {
       if (!selectedRoute || nextStopIndex === -1) return null;
+      if (isAwayFromStart) return selectedRoute.stops[0];
       return selectedRoute.stops[nextStopIndex];
-  }, [selectedRoute, nextStopIndex]);
+  }, [selectedRoute, nextStopIndex, isAwayFromStart]);
 
   return (
     <main className="flex flex-col md:flex-row h-screen bg-background text-foreground">
@@ -437,12 +490,22 @@ export default function DriverPage() {
                   </div>
                 </div>
 
+                {isAwayFromStart && selectedRoute && (
+                     <Alert variant="destructive">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertTitle>You are far from the starting point!</AlertTitle>
+                        <AlertDescription>
+                            Please proceed to the first stop: <span className="font-semibold">{selectedRoute.stops[0].name}</span>. Navigation has been updated.
+                        </AlertDescription>
+                    </Alert>
+                )}
+
               {isTracking && nextStop && (
                   <div className="p-4 rounded-lg bg-primary/10 border-2 border-dashed border-primary space-y-2">
                       <div className="flex items-center justify-between text-sm font-semibold text-primary">
                           <div className="flex items-center gap-2">
                             <Navigation className="h-4 w-4" />
-                            Next Stop
+                            {isAwayFromStart ? "Proceed to Start" : "Next Stop"}
                           </div>
                           <Button variant="outline" size="icon" className='h-7 w-7' onClick={() => setRecenterKey(k => k + 1)}>
                             <LocateFixed className='h-4 w-4'/>
@@ -523,6 +586,8 @@ export default function DriverPage() {
                 driverLocation={location}
                 nextStopIndex={nextStopIndex}
                 recenterKey={recenterKey}
+                isAwayFromStart={isAwayFromStart}
+                pathToStart={pathToStart}
             />
         ) : (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8">
@@ -536,3 +601,5 @@ export default function DriverPage() {
     </main>
   );
 }
+
+    
