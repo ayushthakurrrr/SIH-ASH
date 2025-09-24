@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { PlayCircle, StopCircle, Bus, MapPin, AlertTriangle, Wifi, Route, Navigation, Flag, List, PanelTopClose, PanelTopOpen } from 'lucide-react';
+import { PlayCircle, StopCircle, Bus, MapPin, AlertTriangle, Wifi, Route, Navigation, Flag, List, PanelTopClose, PanelTopOpen, LocateFixed } from 'lucide-react';
 import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { getFirestore, collection, getDocs } from 'firebase/firestore';
 import { app } from '@/lib/firebase';
@@ -57,7 +57,8 @@ const FitBoundsToDriver: FC<{ driverLocation: { lat: number, lng: number } | nul
             map.fitBounds(bounds, {top: 100, bottom: 100, left: 100, right: 100});
         }
         
-    }, [map, driverLocation, nextStopLocation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [map]); // Run only once when the map loads
 
     return null;
 }
@@ -106,7 +107,8 @@ const DriverMap: FC<{
     route: BusRoute;
     driverLocation: { lat: number; lng: number; };
     nextStopIndex: number;
-}> = ({ route, driverLocation, nextStopIndex }) => {
+    recenterKey: number;
+}> = ({ route, driverLocation, nextStopIndex, recenterKey }) => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     const { toast } = useToast();
     const [routePath, setRoutePath] = useState<RoutePath | null>(null);
@@ -152,7 +154,7 @@ const DriverMap: FC<{
                 {driverLocation && (
                     <>
                         <BusMarker position={driverLocation} busId="Your Location" />
-                        <FitBoundsToDriver driverLocation={driverLocation} nextStopLocation={nextStopLocation} />
+                        <FitBoundsToDriver key={recenterKey} driverLocation={driverLocation} nextStopLocation={nextStopLocation} />
                         {nextStopLocation && (
                             <DriverNavigationLine driverLocation={driverLocation} nextStopLocation={nextStopLocation} />
                         )}
@@ -189,6 +191,7 @@ export default function DriverPage() {
   const [busRoutes, setBusRoutes] = useState<BusRoute[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [isPanelMinimized, setIsPanelMinimized] = useState(false);
+  const [recenterKey, setRecenterKey] = useState(0);
 
 
   const socket = useRef<Socket | null>(null);
@@ -419,16 +422,21 @@ export default function DriverPage() {
                 </div>
 
               {isTracking && nextStop && (
-                  <div className="p-4 rounded-lg bg-primary/10 border-2 border-dashed border-primary space-y-2 text-center">
-                      <div className="text-sm font-semibold text-primary flex items-center justify-center gap-2">
-                          <Navigation className="h-4 w-4" />
-                          Next Stop
+                  <div className="p-4 rounded-lg bg-primary/10 border-2 border-dashed border-primary space-y-2">
+                      <div className="flex items-center justify-between text-sm font-semibold text-primary">
+                          <div className="flex items-center gap-2">
+                            <Navigation className="h-4 w-4" />
+                            Next Stop
+                          </div>
+                          <Button variant="outline" size="icon" className='h-7 w-7' onClick={() => setRecenterKey(k => k + 1)}>
+                            <LocateFixed className='h-4 w-4'/>
+                          </Button>
                       </div>
-                      <p className="text-2xl font-bold text-primary-foreground bg-primary rounded-md p-2 flex items-center justify-center gap-3">
+                      <p className="text-2xl font-bold text-primary-foreground bg-primary rounded-md p-2 flex items-center justify-center gap-3 text-center">
                           <Flag className="h-6 w-6" />
                           {nextStop.name}
                       </p>
-                      <p className="text-xs text-muted-foreground">Scheduled for {nextStop.scheduledTime}</p>
+                      <p className="text-xs text-muted-foreground text-center">Scheduled for {nextStop.scheduledTime}</p>
                   </div>
               )}
               
@@ -497,6 +505,7 @@ export default function DriverPage() {
                 route={selectedRoute} 
                 driverLocation={location}
                 nextStopIndex={nextStopIndex}
+                recenterKey={recenterKey}
             />
         ) : (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8">
@@ -510,5 +519,7 @@ export default function DriverPage() {
     </main>
   );
 }
+
+    
 
     
