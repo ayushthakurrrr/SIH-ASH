@@ -397,7 +397,7 @@ export default function DriverPage() {
     if (closestStopIndex === -1) return 0;
 
     // If the driver is very close to a stop, the "next" stop is the one after it.
-    if (minDistance < 50 && closestStopIndex < selectedRoute.stops.length - 1) { // 50 meters threshold
+    if (minDistance < 200 && closestStopIndex < selectedRoute.stops.length - 1) { // 200 meters threshold
         return closestStopIndex + 1;
     }
     
@@ -601,5 +601,3 @@ export default function DriverPage() {
     </main>
   );
 }
-
-    
