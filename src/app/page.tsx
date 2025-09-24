@@ -679,8 +679,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   }, [selectedRoute, visibleBuses, isPanelOpen]);
 
   const { allRoutePoints, journeyStops, pathSegments } = useMemo(() => {
-    const busPoints = Object.values(visibleBuses);
-    let pointsForBounds = [...busPoints];
+    let pointsForBounds = Object.values(visibleBuses);
     if (userLocation) {
         pointsForBounds.push(userLocation);
     }
