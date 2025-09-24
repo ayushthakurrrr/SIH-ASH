@@ -2,10 +2,10 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo, type FC, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, type FC, useCallback, useRef } from 'react';
 import { APIProvider, Map, useMap } from '@vis.gl/react-google-maps';
 import { io, type Socket } from 'socket.io-client';
-import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin, X, RefreshCw } from 'lucide-react';
+import { Bus, WifiOff, Route, Clock, PersonStanding, ChevronDown, ChevronUp, MapPin, X, RefreshCw, Wifi } from 'lucide-react';
 import type { LocationUpdate } from '@/types';
 import BusMarker from '@/components/BusMarker';
 import StopMarker from '@/components/StopMarker';
@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useToast } from "@/hooks/use-toast";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Badge } from '@/components/ui/badge';
 
 type BusLocations = Record<string, { lat: number; lng: number }>;
 type Etas = Record<string, { duration: number, distance: number } | null>;
@@ -296,7 +297,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   const [showFullPath, setShowFullPath] = useState(true);
   const [routePath, setRoutePath] = useState<RoutePath | null>(null);
   const [isPathLoading, setIsPathLoading] = useState(false);
-  const socketRef = React.useRef<Socket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
   const [selectedBusId, setSelectedBusId] = useState<string | null>(null);
   const [busNavPath, setBusNavPath] = useState<RoutePath | null>(null);
 
@@ -756,30 +757,48 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                 >
                     {isPanelOpen ? (
                         <>
-                            <ChevronDown className="mr-2 h-4 w-4" /> Hide Stops
+                            <ChevronDown className="mr-2 h-4 w-4" /> Hide Details
                         </>
                     ) : (
                         <>
-                            <ChevronUp className="mr-2 h-4 w-4" /> View Stops
+                            <ChevronUp className="mr-2 h-4 w-4" /> View Details
                         </>
                     )}
                 </button>
                 {isPanelOpen && (
                     <div className="h-[40vh] flex flex-col">
-                        <div className="p-4 pb-2 flex justify-between items-center">
-                            <h2 className="text-2xl font-bold">{selectedRoute.name}</h2>
-                            {sourceStop && destinationStop && (
-                             <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setShowFullPath(!showFullPath)}
-                             >
-                                {showFullPath ? 'Show Journey' : 'Show Full Path'}
-                             </Button>
-                            )}
+                        <div className="p-4 border-b">
+                          <div className='flex justify-between items-center mb-4'>
+                              <h2 className="text-2xl font-bold">{selectedRoute.name}</h2>
+                              {sourceStop && destinationStop && (
+                              <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setShowFullPath(!showFullPath)}
+                              >
+                                  {showFullPath ? 'Show Journey' : 'Show Full Path'}
+                              </Button>
+                              )}
+                          </div>
+                          <div className="space-y-2">
+                              <h3 className="text-sm font-semibold text-muted-foreground">Buses on this route</h3>
+                              <div className="flex flex-wrap gap-2">
+                                  {selectedRoute.buses.map(busId => {
+                                      const isOnline = !!allBuses[busId];
+                                      return (
+                                          <Badge key={busId} variant={isOnline ? 'default' : 'secondary'} className="gap-2">
+                                              {isOnline ? <Wifi className="h-3 w-3 text-green-400" /> : <WifiOff className="h-3 w-3" />}
+                                              {busId}
+                                              <span className='font-normal opacity-80'>{isOnline ? 'Online' : 'Offline'}</span>
+                                          </Badge>
+                                      );
+                                  })}
+                              </div>
+                          </div>
                         </div>
+
                         <ScrollArea className="flex-grow">
-                            <div className="p-6 pt-0 space-y-6">
+                            <div className="p-6 pt-4 space-y-6">
                                 {journeyStops.map((stop, index) => (
                                     <div key={stop.name} className="space-y-3">
                                         <div className="flex items-center gap-4">
@@ -812,4 +831,5 @@ export default Page;
 
 
     
+
 
