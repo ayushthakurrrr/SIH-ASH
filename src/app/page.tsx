@@ -410,7 +410,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                 });
             },
             (error) => {
-                console.error("Error getting user location:", error);
+                console.error("Error getting user location:", error.message);
                 toast({
                     variant: "destructive",
                     title: "Could not get your location",
@@ -473,7 +473,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
         const dLat = toRad(coords2.lat - coords1.lat);
         const dLon = toRad(coords2.lng - coords1.lng);
         const lat1 = toRad(coords1.lat);
-        const lat2 = toRad(coords2.lat);
+        const lat2 = toRad(coords2.lng);
 
         const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
             Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
@@ -809,7 +809,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                 
                 {selectedBusId && userLocation ? 
                     <MapController /> :
-                    allRoutePoints.length > 0 && <FitBounds points={allRoutePoints} deps={[recenterKey]}/>
+                    allRoutePoints.length > 0 && <FitBounds points={allRoutePoints} deps={[recenterKey, selectedRouteId]}/>
                 }
 
                 {isPathLoading && (
@@ -939,6 +939,7 @@ export default Page;
     
 
     
+
 
 
 
