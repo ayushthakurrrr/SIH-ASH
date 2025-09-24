@@ -1,59 +1,58 @@
-
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, doc, setDoc, writeBatch } from 'firebase/firestore';
+import { initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 import { busRoutesByCity } from '../src/lib/bus-routes.js';
 import dotenv from 'dotenv';
 
-// Configure dotenv to load environment variables
-dotenv.config({ path: '.env.local' });
 dotenv.config({ path: '.env' });
 
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+// Initialize Firebase Admin SDK
+initializeApp({
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
+});
 
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const db = getFirestore();
 
 async function seedDatabase() {
-    console.log('Starting to seed database...');
+  console.log('Starting to seed the database...');
 
-    const batch = writeBatch(db);
+  const { cities } = busRoutesByCity;
+  
+  if (!cities || cities.length === 0) {
+      console.log('No cities found to seed. Exiting.');
+      return;
+  }
 
-    for (const city of busRoutesByCity.cities) {
-        console.log(`Processing city: ${city.name}`);
-        const cityRef = doc(db, 'cities', city.id);
-        batch.set(cityRef, { name: city.name, center: city.center });
+  const citiesCollection = db.collection('cities');
+  const batch = db.batch();
 
-        const routesCollectionRef = collection(cityRef, 'routes');
-        for (const route of city.routes) {
-            console.log(`  Adding route: ${route.name}`);
-            const routeRef = doc(routesCollectionRef, route.id);
-            // Add cityId to each route for easier lookup if ever needed
+  for (const city of cities) {
+    console.log(`Processing city: ${city.name} (${city.id})`);
+    
+    // Create a document for the city
+    const cityRef = citiesCollection.doc(city.id);
+    const { routes, ...cityData } = city;
+    batch.set(cityRef, cityData);
+    
+    // Create a subcollection for routes within the city
+    const routesCollection = cityRef.collection('routes');
+    if (routes && routes.length > 0) {
+        for (const route of routes) {
+            console.log(`  - Adding route: ${route.name} (${route.id})`);
+            const routeRef = routesCollection.doc(route.id);
+            // Add cityId to each route for easier lookup if needed later
             batch.set(routeRef, { ...route, cityId: city.id });
         }
+    } else {
+        console.log(`  - No routes to add for ${city.name}.`);
     }
+  }
 
-    try {
-        await batch.commit();
-        console.log('Database seeded successfully!');
-    } catch (error) {
-        console.error('Error seeding database:', error);
-    }
+  try {
+    await batch.commit();
+    console.log('✅ Database seeded successfully!');
+  } catch (error) {
+    console.error('❌ Error seeding database:', error);
+  }
 }
 
-seedDatabase().then(() => {
-    // Manually exit the process, as the Firestore connection may keep it alive.
-    process.exit(0);
-}).catch(error => {
-    console.error("Seeding script failed:", error);
-    process.exit(1);
-});
+seedDatabase();

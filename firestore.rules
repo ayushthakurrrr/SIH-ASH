@@ -1,20 +1,14 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow anyone to read the list of cities and individual city documents.
-    // This is needed to populate the city selection dropdown.
+    // Allow read access to cities and their routes for all users
     match /cities/{cityId} {
-      allow read; 
-    }
-
-    // Allow anyone to read the list of routes and individual route documents
-    // for a specific city.
-    match /cities/{cityId}/routes/{routeId} {
       allow read;
+      match /routes/{routeId} {
+        allow read;
+      }
     }
-
-    // Default deny all other reads and writes
+    // By default, deny all other writes/reads
     match /{document=**} {
       allow read, write: if false;
     }
