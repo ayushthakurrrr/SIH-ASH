@@ -24,6 +24,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 type BusLocations = Record<string, { lat: number; lng: number }>;
 type Etas = Record<string, { duration: number, distance: number } | null>;
@@ -131,6 +132,7 @@ const Header: FC<{
           <Button variant="ghost" size="icon" onClick={onClear} aria-label="Clear selection">
             <X className="h-4 w-4" />
           </Button>
+          <ThemeToggle />
         </div>
       </div>
     </header>
