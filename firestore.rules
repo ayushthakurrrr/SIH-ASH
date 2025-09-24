@@ -1,25 +1,26 @@
+
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow public read access to cities and their routes
-    match /cities/{cityId} {
-      allow read;
+    // Allow clients to get the list of all cities
+    match /cities {
+      allow list: if true;
+    }
 
+    // Allow clients to get a single city document
+    // And allow reading the nested routes for a specific city
+    match /cities/{cityId} {
+      allow get: if true;
+      
       match /routes/{routeId} {
-        allow read;
+        allow read: if true;
       }
     }
-
-    // Users can only read/write their own user document
-    match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // Lock down all other writes, but allow reads for admins in functions
-    // Note: this doesn't grant client-side admin read access, that's handled by the function.
+    
+    // Explicitly deny writes to all collections from the client
     match /{document=**} {
-      allow read, write: if false;
+      allow write: if false;
     }
   }
 }
