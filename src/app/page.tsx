@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React, { useState, useEffect, useMemo, type FC, useCallback, useRef } from 'react';
@@ -325,8 +324,24 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
   const [busNavPath, setBusNavPath] = useState<RoutePath | null>(null);
   const [recenterKey, setRecenterKey] = useState(0);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const map = useMap();
+  
+  const MapController: FC = () => {
+    const map = useMap();
+    useEffect(() => {
+        if (!map || !selectedBusId || !userLocation) return;
+        
+        const busLocation = allBuses[selectedBusId];
+        if (!busLocation) return;
 
+        const bounds = new google.maps.LatLngBounds();
+        bounds.extend(userLocation);
+        bounds.extend(busLocation);
+        map.fitBounds(bounds, 150);
+
+    }, [map, selectedBusId, userLocation, allBuses]);
+
+    return null;
+  }
 
   // Define a color palette for the buses
   const busColors = useMemo(() => [
@@ -749,6 +764,7 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
                     mapId="livetrack-map"
                     onClick={() => setSelectedBusId(null)}
                 >
+                <MapController />
                 {Object.entries(visibleBuses).map(([id, pos]) => (
                     <BusMarker
                         key={id}
@@ -886,13 +902,3 @@ const UserMapPage: FC<{busRoutes: BusRoute[]}> = ({busRoutes}) => {
 }
 
 export default Page;
-
-
-    
-
-
-
-
-
-
-    
